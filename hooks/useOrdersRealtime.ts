@@ -1,0 +1,230 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import type { MenuCourse, OrderStatus } from "@/lib/database.types";
+
+export type OrderWithRelations = {
+  id: string;
+  event_id: string;
+  table_id: string;
+  seat_number: number;
+  menu_item_id: string;
+  course: MenuCourse;
+  special_wishes: string | null;
+  status: OrderStatus;
+  created_at: string;
+  updated_at: string;
+  menu_items: { label: string } | null;
+  banquet_tables: { name: string } | null;
+};
+
+export type RealtimeConnectionState =
+  | "idle"
+  | "connecting"
+  | "subscribed"
+  | "disconnected"
+  | "error";
+
+type UseOrdersRealtimeOptions = {
+  eventId: string;
+  tableId?: string;
+};
+
+function normalizeRow(raw: Record<string, unknown>): OrderWithRelations {
+  const menu_items = raw.menu_items as { label: string } | null | undefined;
+  const banquet_tables = raw.banquet_tables as { name: string } | null | undefined;
+  const courseRaw = raw.course as string | undefined;
+  const course: MenuCourse =
+    courseRaw === "starter" || courseRaw === "dessert" ? courseRaw : "main";
+  return {
+    id: String(raw.id),
+    event_id: String(raw.event_id),
+    table_id: String(raw.table_id),
+    seat_number: Number(raw.seat_number),
+    menu_item_id: String(raw.menu_item_id),
+    course,
+    special_wishes: (raw.special_wishes as string | null) ?? null,
+    status: raw.status as OrderStatus,
+    created_at: String(raw.created_at),
+    updated_at: String(raw.updated_at),
+    menu_items: menu_items ?? null,
+    banquet_tables: banquet_tables ?? null,
+  };
+}
+
+function mapChannelStatus(
+  status: string,
+  err: Error | undefined,
+): { state: RealtimeConnectionState; message: string | null } {
+  switch (status) {
+    case "SUBSCRIBED":
+      return { state: "subscribed", message: null };
+    case "CHANNEL_ERROR":
+      return {
+        state: "error",
+        message: err?.message ?? "Realtime channel error. Check your connection.",
+      };
+    case "TIMED_OUT":
+      return { state: "error", message: "Realtime connection timed out." };
+    case "CLOSED":
+      return { state: "disconnected", message: null };
+    default:
+      return { state: "connecting", message: null };
+  }
+}
+
+export function useOrdersRealtime({ eventId, tableId }: UseOrdersRealtimeOptions) {
+  const [orders, setOrders] = useState<OrderWithRelations[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [realtimeState, setRealtimeState] = useState<RealtimeConnectionState>("connecting");
+  const [realtimeMessage, setRealtimeMessage] = useState<string | null>(null);
+  const loadOrdersRef = useRef<(opts?: { silent?: boolean }) => Promise<void>>(async () => {});
+
+  useEffect(() => {
+    const supabase = createClient();
+    let cancelled = false;
+
+    async function load(opts?: { silent?: boolean }) {
+      if (!opts?.silent) {
+        setLoading(true);
+      }
+      setError(null);
+      let query = supabase
+        .from("orders")
+        .select("*, menu_items(label), banquet_tables(name)")
+        .eq("event_id", eventId)
+        .neq("status", "served")
+        .order("created_at", { ascending: true });
+
+      if (tableId) {
+        query = query.eq("table_id", tableId);
+      }
+
+      const { data, error: qError } = await query;
+      if (cancelled) {
+        return;
+      }
+      if (qError) {
+        setError(qError.message);
+        setOrders([]);
+      } else {
+        setOrders((data ?? []).map((r) => normalizeRow(r as Record<string, unknown>)));
+      }
+      if (!opts?.silent) {
+        setLoading(false);
+      }
+    }
+
+    loadOrdersRef.current = load;
+
+    void load();
+
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void load({ silent: true });
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    const channelName = tableId
+      ? `orders:${eventId}:table:${tableId}`
+      : `orders:${eventId}:kitchen`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "orders",
+          filter: `event_id=eq.${eventId}`,
+        },
+        async (payload) => {
+          if (payload.eventType === "DELETE") {
+            const oldRow = payload.old as { id?: string } | null;
+            if (oldRow?.id) {
+              setOrders((prev) => prev.filter((o) => o.id !== String(oldRow.id)));
+            }
+            return;
+          }
+
+          const incoming = payload.new as {
+            id?: string;
+            table_id?: string;
+            status?: OrderStatus;
+          } | null;
+          if (!incoming?.id) {
+            return;
+          }
+          if (tableId && incoming.table_id !== tableId) {
+            return;
+          }
+          if (incoming.status === "served") {
+            setOrders((prev) => prev.filter((o) => o.id !== String(incoming.id)));
+            return;
+          }
+
+          const { data, error: oneErr } = await supabase
+            .from("orders")
+            .select("*, menu_items(label), banquet_tables(name)")
+            .eq("id", incoming.id)
+            .maybeSingle();
+
+          if (cancelled || oneErr || !data) {
+            return;
+          }
+
+          const row = normalizeRow(data as Record<string, unknown>);
+          if (row.status === "served") {
+            setOrders((prev) => prev.filter((o) => o.id !== row.id));
+            return;
+          }
+
+          setOrders((prev) => {
+            const idx = prev.findIndex((o) => o.id === row.id);
+            if (idx === -1) {
+              return [...prev, row].sort(
+                (a, b) =>
+                  new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+              );
+            }
+            const next = [...prev];
+            next[idx] = row;
+            return next;
+          });
+        },
+      )
+      .subscribe((status, err) => {
+        if (cancelled) return;
+        const { state, message } = mapChannelStatus(status, err);
+        setRealtimeState(state);
+        setRealtimeMessage(message);
+      });
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      void supabase.removeChannel(channel);
+      setRealtimeState("idle");
+      setRealtimeMessage(null);
+    };
+  }, [eventId, tableId]);
+
+  const refetch = useCallback((opts?: { silent?: boolean }) => {
+    return loadOrdersRef.current(opts);
+  }, []);
+
+  const byTableId = useMemo(() => {
+    const map = new Map<string, OrderWithRelations[]>();
+    for (const o of orders) {
+      const list = map.get(o.table_id) ?? [];
+      list.push(o);
+      map.set(o.table_id, list);
+    }
+    return map;
+  }, [orders]);
+
+  return { orders, byTableId, loading, error, realtimeState, realtimeMessage, refetch };
+}

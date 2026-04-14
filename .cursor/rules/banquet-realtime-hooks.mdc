@@ -1,0 +1,10 @@
+---
+description: Realtime hooks contract for orders
+globs: hooks/**/*.ts
+alwaysApply: false
+---
+
+# Realtime hooks
+
+- **`useOrdersRealtime`**: initial `select` for `orders` with `menu_items(label)` and `banquet_tables(name)` for the event; subscribe to `postgres_changes` on `orders` with `event_id=eq.<eventId>`. Merge **INSERT** and **UPDATE** payloads into state by `id`. Optional `tableId` filters client-side so waiter views ignore other tables.
+- Always unsubscribe / remove channel on unmount.

@@ -1,0 +1,11 @@
+---
+description: Next.js App Router, route groups, and PWA conventions for banquet app
+globs: app/**/*,components/**/*,hooks/**/*
+alwaysApply: false
+---
+
+# Banquet Next.js / PWA
+
+- Prefer **Server Components** by default. Use `'use client'` only for hooks, Supabase Realtime, modals, and local UI state.
+- Route groups: `(manager)` → `/manager`, `(waiter)` → `/waiter`, `(kitchen)` → `/kitchen`. Enforce **role redirects** in those layouts (or equivalent server checks).
+- PWA: `manifest`, icons, `standalone` display. Do not cache authenticated, highly dynamic order data aggressively without an explicit offline strategy.

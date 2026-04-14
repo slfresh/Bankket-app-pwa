@@ -1,0 +1,14 @@
+---
+description: Supabase client usage, RLS, Realtime, and banquet schema naming for this project
+globs: lib/supabase/**/*,middleware.ts,supabase/**/*.sql
+alwaysApply: false
+---
+
+# Banquet Supabase
+
+- Browser code uses **only** `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Never put `service_role` in client bundles or `.env` values that ship to the browser.
+- Use `@supabase/ssr`: `createBrowserClient` in client components; `createServerClient` + cookies on the server and in Server Actions.
+- Table name for seating is **`banquet_tables`** (never `tables`). Orders use `event_id`, `table_id`, `seat_number`, `menu_item_id`.
+- Assume **RLS** on all domain tables; add policies before exposing new tables to clients.
+- **Kitchen** status changes: call RPC **`advance_order_status`** only (no direct `update` on `orders` for role `kitchen`).
+- **Realtime:** subscribe to `public.orders` with filter `event_id=eq.<uuid>`. Use a stable channel name per view; call **`removeChannel`** (or equivalent cleanup) on unmount.

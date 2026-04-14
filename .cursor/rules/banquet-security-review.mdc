@@ -1,0 +1,10 @@
+---
+description: Secrets, validation, and safe logging for banquet ordering
+alwaysApply: true
+---
+
+# Banquet security checklist
+
+- No secrets in git; `.env.local` is gitignored. Only `NEXT_PUBLIC_*` may be exposed to the client.
+- For manager mutations (events, menu items, table batches), validate **`event_id` / `table_id` / `menu_item_id`** relationships on the server (defense in depth with RLS).
+- Log or surface Supabase errors **without** printing tokens or full session objects.
