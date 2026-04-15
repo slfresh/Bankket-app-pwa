@@ -229,6 +229,16 @@ export function SeatGrid({
     });
   }, [batchSendOpen, modalSeat, missingCoursesForModalSeat, menuByCourse]);
 
+  /** Tall batch UI must scroll; flex default min-height:auto was clipping the top off-screen on phones. */
+  useEffect(() => {
+    if (!batchSendOpen) return;
+    const el = orderDialogRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTop = 0;
+    });
+  }, [batchSendOpen]);
+
   useEffect(() => {
     const open =
       modalSeat !== null ||
@@ -643,7 +653,7 @@ export function SeatGrid({
 
       {!readOnly && modalSeat !== null ? (
         <div
-          className="fixed inset-0 z-[52] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+          className="fixed inset-0 z-[52] flex items-end justify-center bg-black/50 px-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:items-center sm:p-4"
           role="presentation"
           onClick={() => {
             if (!pending) {
@@ -659,7 +669,7 @@ export function SeatGrid({
             role="dialog"
             aria-modal="true"
             aria-labelledby="order-dialog-title"
-            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl outline-none dark:bg-neutral-950"
+            className="min-h-0 w-full max-h-[85dvh] max-w-md overflow-y-auto overscroll-y-contain rounded-2xl bg-white p-5 shadow-xl outline-none [-webkit-overflow-scrolling:touch] dark:bg-neutral-950"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="order-dialog-title" className="text-lg font-semibold">
