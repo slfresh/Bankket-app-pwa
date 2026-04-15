@@ -92,9 +92,23 @@ export function separateFloorBoxes(
 
   const work = boxes.map((b) => ({ ...b }));
 
-  function clamp(p: { x: number; y: number }) {
-    p.x = Math.min(1 - margin, Math.max(margin, p.x));
-    p.y = Math.min(1 - margin, Math.max(margin, p.y));
+  /** Keep the axis-aligned footprint inside [0,1]²; `margin` is inset from the canvas edge to the card bbox. */
+  function clamp(p: { x: number; y: number; halfW: number; halfH: number }) {
+    const inset = margin;
+    const minX = p.halfW + inset;
+    const maxX = 1 - p.halfW - inset;
+    const minY = p.halfH + inset;
+    const maxY = 1 - p.halfH - inset;
+    if (minX <= maxX) {
+      p.x = Math.min(maxX, Math.max(minX, p.x));
+    } else {
+      p.x = 0.5;
+    }
+    if (minY <= maxY) {
+      p.y = Math.min(maxY, Math.max(minY, p.y));
+    } else {
+      p.y = 0.5;
+    }
   }
 
   for (let iter = 0; iter < iterations; iter++) {

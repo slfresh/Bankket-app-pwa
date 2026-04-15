@@ -112,7 +112,8 @@ export function KitchenEventFloor({ eventId, tables, openOrderCountByTableId }: 
           Tap a table for the same seat map as the waiter view (view only). Use the list on the right
           to mark dishes cooked or served.
         </p>
-        <div className="relative mx-auto aspect-[4/3] w-full max-w-lg overflow-visible rounded-lg border border-dashed border-neutral-600 bg-neutral-900/80">
+        <div className="mx-auto max-h-[min(72dvh,36rem)] w-full max-w-lg overflow-x-auto overflow-y-auto overscroll-contain rounded-lg border border-dashed border-neutral-600 bg-neutral-900/80 [-webkit-overflow-scrolling:touch]">
+          <div className="relative mx-auto aspect-[4/3] w-full max-w-lg">
           <div className="absolute inset-5 sm:inset-6">
             {tables.map((t, floorIndex) => {
               const fx = t.floor_x;
@@ -144,6 +145,7 @@ export function KitchenEventFloor({ eventId, tables, openOrderCountByTableId }: 
                 </div>
               );
             })}
+          </div>
           </div>
         </div>
       </div>

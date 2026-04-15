@@ -7,6 +7,7 @@ import { useSeatGuestNotesForEvents } from "@/hooks/useSeatGuestNotesRealtime";
 import { menuCourseSortIndex, menuCourseTitle } from "@/lib/domain/menu-course";
 import {
   isKitchenSoundMuted,
+  primeKitchenAudio,
   setKitchenSoundMuted,
 } from "@/lib/kitchen/play-beep";
 import { advanceOrderStatus } from "@/lib/actions/kitchen";
@@ -114,7 +115,12 @@ export function KitchenMultiBoard({ events }: { events: EventMeta[] }) {
   }
 
   return (
-    <div className="relative pb-28 sm:pb-32">
+    <div
+      className="relative pb-28 sm:pb-32"
+      onPointerDown={() => {
+        primeKitchenAudio();
+      }}
+    >
       {toast ? (
         <div className="fixed left-1/2 top-20 z-[100] w-[min(100%,24rem)] -translate-x-1/2 px-4">
           <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-600/60 bg-amber-950 px-4 py-3 text-amber-50 shadow-lg">
@@ -130,6 +136,7 @@ export function KitchenMultiBoard({ events }: { events: EventMeta[] }) {
           type="button"
           className="rounded-lg border border-neutral-600 px-3 py-2 text-xs font-medium text-neutral-300 hover:bg-neutral-800"
           onClick={() => {
+            primeKitchenAudio();
             const next = !soundMuted;
             setSoundMuted(next);
             setKitchenSoundMuted(next);

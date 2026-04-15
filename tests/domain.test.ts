@@ -51,6 +51,19 @@ describe("separateFloorBoxes", () => {
     const overlapY = 0.12 + 0.12 + 0.01 - Math.abs(b!.y - a!.y);
     expect(overlapX <= 0 || overlapY <= 0).toBe(true);
   });
+
+  it("clamps centers so each footprint stays inside the unit square", () => {
+    const inset = 0.02;
+    const map = separateFloorBoxes(
+      [{ id: "wide", x: 0.98, y: 0.5, halfW: 0.2, halfH: 0.1 }],
+      { margin: inset, iterations: 5, gap: 0.01 },
+    );
+    const p = map.get("wide")!;
+    expect(p.x + 0.2).toBeLessThanOrEqual(1 - inset + 1e-9);
+    expect(p.x - 0.2).toBeGreaterThanOrEqual(inset - 1e-9);
+    expect(p.y + 0.1).toBeLessThanOrEqual(1 - inset + 1e-9);
+    expect(p.y - 0.1).toBeGreaterThanOrEqual(inset - 1e-9);
+  });
 });
 
 describe("kitchenTableFloorHalfExtents", () => {

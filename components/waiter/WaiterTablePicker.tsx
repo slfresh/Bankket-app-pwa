@@ -89,9 +89,10 @@ export function WaiterTablePicker({
             Open a table to see seats, guest notes, and orders. This map is for room layout only.
           </p>
         <div
-          className="relative mx-auto aspect-[4/3] w-full max-w-lg overflow-visible rounded-lg border border-dashed border-neutral-300 bg-neutral-50 dark:border-neutral-600 dark:bg-neutral-900/80"
+          className="mx-auto max-h-[min(72dvh,36rem)] w-full max-w-lg overflow-x-auto overflow-y-auto overscroll-contain rounded-lg border border-dashed border-neutral-300 bg-neutral-50 [-webkit-overflow-scrolling:touch] dark:border-neutral-600 dark:bg-neutral-900/80"
           aria-label="Table floor plan"
         >
+          <div className="relative mx-auto aspect-[4/3] w-full max-w-lg">
           <div className="absolute inset-5 sm:inset-6">
             {tables.map((t, floorIndex) => {
               const fx = t.floor_x;
@@ -132,6 +133,7 @@ export function WaiterTablePicker({
                 </Link>
               );
             })}
+          </div>
           </div>
         </div>
         </div>

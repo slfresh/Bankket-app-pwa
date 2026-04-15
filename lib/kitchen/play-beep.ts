@@ -1,27 +1,62 @@
-/** Short beep for kitchen “new order” (requires user gesture on some browsers for first play). */
-export function playKitchenBeep(): void {
-  if (typeof window === "undefined") return;
+let sharedAudioContext: AudioContext | null = null;
+
+function getSharedAudioContext(): AudioContext | null {
+  if (typeof window === "undefined") return null;
   try {
-    const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AC) return;
-    const ctx = new AC();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = 880;
-    gain.gain.value = 0.07;
-    osc.start();
-    setTimeout(() => {
-      try {
-        osc.stop();
-        void ctx.close();
-      } catch {
-        /* ignore */
-      }
-    }, 140);
+    if (sharedAudioContext?.state === "closed") {
+      sharedAudioContext = null;
+    }
+    if (!sharedAudioContext) {
+      const AC =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AC) return null;
+      sharedAudioContext = new AC();
+    }
+    return sharedAudioContext;
   } catch {
-    /* ignore */
+    return null;
+  }
+}
+
+/**
+ * Resume the shared Web Audio context after a tap (Chrome/Android start it suspended until a gesture).
+ */
+export function primeKitchenAudio(): void {
+  const ctx = getSharedAudioContext();
+  if (ctx?.state === "suspended") {
+    void ctx.resume().catch(() => {});
+  }
+}
+
+/** Short beep for kitchen “new order” (mobile browsers need a resumed AudioContext — use {@link primeKitchenAudio} on first tap). */
+export function playKitchenBeep(): void {
+  const ctx = getSharedAudioContext();
+  if (!ctx) return;
+  const play = () => {
+    try {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      gain.gain.value = 0.07;
+      osc.start();
+      window.setTimeout(() => {
+        try {
+          osc.stop();
+        } catch {
+          /* ignore */
+        }
+      }, 140);
+    } catch {
+      /* ignore */
+    }
+  };
+  if (ctx.state === "suspended") {
+    void ctx.resume().then(play).catch(() => play());
+  } else {
+    play();
   }
 }
 
