@@ -4,10 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { FloorPlanTableShape } from "@/components/floor-plan/FloorPlanTableShape";
 import type { Json, TableLayout } from "@/lib/database.types";
-import {
-  kitchenWaiterShapeHalfExtents,
-  separateFloorBoxes,
-} from "@/lib/domain/separate-floor-points";
+import { separateFloorBoxes, waiterFloorSeparationHalfExtents } from "@/lib/domain/separate-floor-points";
 
 type TableRow = {
   id: string;
@@ -45,7 +42,7 @@ export function WaiterTablePicker({
         Number.isFinite(t.floor_y),
     );
     const boxes = placed.map((t) => {
-      const { halfW, halfH } = kitchenWaiterShapeHalfExtents(t.layout);
+      const { halfW, halfH } = waiterFloorSeparationHalfExtents(t.layout, t.total_seats);
       return {
         id: t.id,
         x: t.floor_x as number,
@@ -54,7 +51,7 @@ export function WaiterTablePicker({
         halfH,
       };
     });
-    return separateFloorBoxes(boxes, { margin: 0.06, iterations: 70, gap: 0.016 });
+    return separateFloorBoxes(boxes, { margin: 0.045, iterations: 120, gap: 0.028 });
   }, [tables]);
 
   return (

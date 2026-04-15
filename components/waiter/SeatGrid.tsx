@@ -210,6 +210,10 @@ export function SeatGrid({
     });
   }, [modalSeat, orders, menuByCourse]);
 
+  /** Multi-course batch panel replaces the single-course pickers so Starter is not shown twice. */
+  const orderModalBatchMode =
+    batchSendOpen && missingCoursesForModalSeat.length >= 2;
+
   useEffect(() => {
     if (itemsForSelectedCourse.length && !itemsForSelectedCourse.some((m) => m.id === selectedMenuId)) {
       setSelectedMenuId(itemsForSelectedCourse[0]?.id ?? "");
@@ -358,7 +362,7 @@ export function SeatGrid({
           <p className="text-center text-[11px] font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
             One long side
           </p>
-          <div className="flex min-h-0 justify-center gap-2 overflow-x-auto overflow-y-hidden pb-3 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
+          <div className="flex min-h-0 justify-start gap-2 overflow-x-auto overflow-y-hidden px-3 pb-3 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
             {topSeats.map((seat) => (
               <div key={seat} className={seatColClass}>
                 {renderSeatButton(seat)}
@@ -378,7 +382,7 @@ export function SeatGrid({
           <p className="text-center text-[11px] font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
             Opposite long side
           </p>
-          <div className="flex min-h-0 justify-center gap-2 overflow-x-auto overflow-y-hidden pb-3 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
+          <div className="flex min-h-0 justify-start gap-2 overflow-x-auto overflow-y-hidden px-3 pb-3 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
             {bottomSeats.map((seat) => (
               <div key={seat} className={seatColClass}>
                 {renderSeatButton(seat)}
@@ -402,7 +406,7 @@ export function SeatGrid({
                   <p className="text-center text-[11px] font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
                     Top leg (horizontal)
                   </p>
-                  <div className="flex min-h-0 justify-center gap-2 overflow-x-auto overflow-y-hidden pb-3 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
+                  <div className="flex min-h-0 justify-start gap-2 overflow-x-auto overflow-y-hidden px-3 pb-3 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
                     {leg1.map((seat) => (
                       <div key={seat} className={seatColClass}>
                         {renderSeatButton(seat)}
@@ -417,7 +421,7 @@ export function SeatGrid({
                   <p className="text-center text-[11px] font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
                     Outer leg (vertical)
                   </p>
-                  <div className="flex min-h-0 justify-center gap-2 overflow-x-auto overflow-y-hidden pb-3 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
+                  <div className="flex min-h-0 justify-start gap-2 overflow-x-auto overflow-y-hidden px-3 pb-3 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
                     {leg2.map((seat) => (
                       <div key={seat} className={seatColClass}>
                         {renderSeatButton(seat)}
@@ -432,7 +436,7 @@ export function SeatGrid({
                   <p className="text-center text-[11px] font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
                     Bottom leg (horizontal)
                   </p>
-                  <div className="flex min-h-0 justify-center gap-2 overflow-x-auto overflow-y-hidden pb-3 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
+                  <div className="flex min-h-0 justify-start gap-2 overflow-x-auto overflow-y-hidden px-3 pb-3 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
                     {leg3.map((seat) => (
                       <div key={seat} className={seatColClass}>
                         {renderSeatButton(seat)}
@@ -676,49 +680,55 @@ export function SeatGrid({
               Seat {modalSeat} · {tableName}
             </h2>
             <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-              {orderModalTip ??
-                "Choose a course and dish, then send. You can send the next course without closing—tap Done when finished. Guest note applies to every course at this seat."}
+              {orderModalBatchMode
+                ? "Guest note above applies to every line in the batch. Pick a dish for each course below, then use the green Send all to kitchen button."
+                : orderModalTip ??
+                  "Choose a course and dish, then send. You can send the next course without closing—tap Done when finished. Guest note applies to every course at this seat."}
             </p>
             {formError ? (
               <p className="mt-3 text-sm text-red-600 dark:text-red-400">{formError}</p>
             ) : null}
-            <label className="mt-4 flex flex-col gap-1 text-sm font-medium">
-              Course
-              <select
-                value={selectedCourse}
-                onChange={(e) => setSelectedCourse(e.target.value as MenuCourse)}
-                className="rounded-md border border-neutral-300 bg-white px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900"
-              >
-                {MENU_COURSE_ORDER.filter((c) => {
-                  const items = menuByCourse.get(c) ?? [];
-                  if (items.length === 0) return false;
-                  return !orders.some((o) => o.seat_number === modalSeat && o.course === c);
-                }).map((c) => (
-                  <option key={c} value={c}>
-                    {menuCourseTitle(c)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="mt-4 flex flex-col gap-1 text-sm font-medium">
-              Dish
-              <select
-                value={selectedMenuId}
-                onChange={(e) => setSelectedMenuId(e.target.value)}
-                disabled={itemsForSelectedCourse.length === 0}
-                className="rounded-md border border-neutral-300 bg-white px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900"
-              >
-                {itemsForSelectedCourse.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {itemsForSelectedCourse.length === 0 ? (
-              <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
-                No menu options for this course — ask a manager to add them.
-              </p>
+            {!orderModalBatchMode ? (
+              <>
+                <label className="mt-4 flex flex-col gap-1 text-sm font-medium">
+                  Course
+                  <select
+                    value={selectedCourse}
+                    onChange={(e) => setSelectedCourse(e.target.value as MenuCourse)}
+                    className="rounded-md border border-neutral-300 bg-white px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900"
+                  >
+                    {MENU_COURSE_ORDER.filter((c) => {
+                      const items = menuByCourse.get(c) ?? [];
+                      if (items.length === 0) return false;
+                      return !orders.some((o) => o.seat_number === modalSeat && o.course === c);
+                    }).map((c) => (
+                      <option key={c} value={c}>
+                        {menuCourseTitle(c)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="mt-4 flex flex-col gap-1 text-sm font-medium">
+                  Dish
+                  <select
+                    value={selectedMenuId}
+                    onChange={(e) => setSelectedMenuId(e.target.value)}
+                    disabled={itemsForSelectedCourse.length === 0}
+                    className="rounded-md border border-neutral-300 bg-white px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900"
+                  >
+                    {itemsForSelectedCourse.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {itemsForSelectedCourse.length === 0 ? (
+                  <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+                    No menu options for this course — ask a manager to add them.
+                  </p>
+                ) : null}
+              </>
             ) : null}
             <label className="mt-3 flex flex-col gap-1 text-sm font-medium text-red-700 dark:text-red-300">
               Guest note for kitchen (allergies, all courses)
@@ -730,16 +740,18 @@ export function SeatGrid({
                 className="rounded-md border border-red-200 bg-white px-3 py-2 text-base dark:border-red-900/50 dark:bg-neutral-900"
               />
             </label>
-            <label className="mt-3 flex flex-col gap-1 text-sm font-medium">
-              Only this plate / course
-              <textarea
-                value={courseWish}
-                onChange={(e) => setCourseWish(e.target.value)}
-                rows={2}
-                placeholder="e.g. Sauce on the side for this plate"
-                className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-base dark:border-neutral-700 dark:bg-neutral-900"
-              />
-            </label>
+            {!orderModalBatchMode ? (
+              <label className="mt-3 flex flex-col gap-1 text-sm font-medium">
+                Only this plate / course
+                <textarea
+                  value={courseWish}
+                  onChange={(e) => setCourseWish(e.target.value)}
+                  rows={2}
+                  placeholder="e.g. Sauce on the side for this plate"
+                  className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-base dark:border-neutral-700 dark:bg-neutral-900"
+                />
+              </label>
+            ) : null}
             {missingCoursesForModalSeat.length >= 2 ? (
               <div className="mt-4 border-t border-neutral-200 pt-4 dark:border-neutral-800">
                 <button
@@ -836,7 +848,7 @@ export function SeatGrid({
               </div>
             ) : null}
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-              {missingCoursesForModalSeat.length >= 2 && batchSendOpen ? (
+              {orderModalBatchMode ? (
                 <p className="order-first text-xs text-neutral-500 dark:text-neutral-400 sm:order-none sm:mr-auto sm:max-w-[55%]">
                   Use the green <span className="font-medium text-neutral-700 dark:text-neutral-300">Send all to kitchen</span>{" "}
                   button for this batch — single-course send is hidden here.
@@ -865,7 +877,7 @@ export function SeatGrid({
                 >
                   Done
                 </button>
-                {!(missingCoursesForModalSeat.length >= 2 && batchSendOpen) ? (
+                {!orderModalBatchMode ? (
                   <button
                     type="button"
                     disabled={pending || !selectedMenuId || itemsForSelectedCourse.length === 0}

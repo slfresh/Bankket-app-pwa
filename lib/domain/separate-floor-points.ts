@@ -55,6 +55,26 @@ export function kitchenWaiterShapeHalfExtents(layout: TableLayout): { halfW: num
 }
 
 /**
+ * Conservative footprints for {@link separateFloorBoxes} on the **waiter** floor map.
+ * Cards are fixed rem sizes; on a ~320px-wide canvas they span a larger fraction of [0,1]
+ * than {@link kitchenWaiterShapeHalfExtents}, so the kitchen-sized boxes still overlapped visually.
+ */
+export function waiterFloorSeparationHalfExtents(
+  layout: TableLayout,
+  totalSeats: number,
+): { halfW: number; halfH: number } {
+  const n = Math.max(1, totalSeats);
+  if (layout === "round") {
+    return { halfW: 0.14, halfH: 0.15 };
+  }
+  if (layout === "block") {
+    return { halfW: 0.19, halfH: 0.13 };
+  }
+  const half = Math.min(0.18, 0.12 + n * 0.005);
+  return { halfW: half, halfH: Math.min(0.21, half + 0.025) };
+}
+
+/**
  * Separate overlapping axis-aligned boxes by nudging centers (display-only).
  * Prefer over {@link separateFloorPoints} when cards are much taller than wide.
  */

@@ -5,6 +5,7 @@ import {
   kitchenWaiterShapeHalfExtents,
   separateFloorBoxes,
   separateFloorPoints,
+  waiterFloorSeparationHalfExtents,
 } from "@/lib/domain/separate-floor-points";
 import { lShapeLegCounts } from "@/lib/domain/seat-layout";
 
@@ -64,6 +65,17 @@ describe("kitchenWaiterShapeHalfExtents", () => {
   it("block silhouette is wider than tall in normalized space", () => {
     const b = kitchenWaiterShapeHalfExtents("block");
     expect(b.halfW).toBeGreaterThan(b.halfH);
+  });
+});
+
+describe("waiterFloorSeparationHalfExtents", () => {
+  it("uses larger footprints than kitchen waiter extents for phone-sized canvases", () => {
+    const k = kitchenWaiterShapeHalfExtents("round");
+    const w = waiterFloorSeparationHalfExtents("round", 8);
+    expect(w.halfW).toBeGreaterThan(k.halfW);
+    expect(w.halfH).toBeGreaterThan(k.halfH);
+    const wb = waiterFloorSeparationHalfExtents("block", 9);
+    expect(wb.halfW).toBeGreaterThan(kitchenWaiterShapeHalfExtents("block").halfW);
   });
 });
 
