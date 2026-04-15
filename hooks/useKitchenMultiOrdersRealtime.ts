@@ -125,6 +125,12 @@ export function useKitchenMultiOrdersRealtime(eventIds: string[]) {
     }
     document.addEventListener("visibilitychange", onVisibilityChange);
 
+    const pollMs = 25_000;
+    const pollTimer = window.setInterval(() => {
+      if (cancelled || document.visibilityState !== "visible") return;
+      void load({ silent: true });
+    }, pollMs);
+
     function onChannelStatus(status: string, err: Error | undefined) {
       if (cancelled) return;
       if (status === "SUBSCRIBED") {
@@ -214,6 +220,7 @@ export function useKitchenMultiOrdersRealtime(eventIds: string[]) {
 
     return () => {
       cancelled = true;
+      window.clearInterval(pollTimer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       for (const ch of channelRefs) {
         void supabase.removeChannel(ch);

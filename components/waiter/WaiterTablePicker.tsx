@@ -1,9 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { FloorPlanTableShape } from "@/components/floor-plan/FloorPlanTableShape";
 import type { Json, TableLayout } from "@/lib/database.types";
+import {
+  kitchenWaiterShapeHalfExtents,
+  separateFloorBoxes,
+} from "@/lib/domain/separate-floor-points";
 
 type TableRow = {
   id: string;
@@ -30,6 +34,28 @@ export function WaiterTablePicker({
     (t) => t.floor_x != null && t.floor_y != null && Number.isFinite(t.floor_x) && Number.isFinite(t.floor_y),
   );
   const [mode, setMode] = useState<"list" | "floor">("list");
+
+  /** Same nudge as kitchen floor so stacked manager coords do not overlap on small screens. */
+  const displayPositions = useMemo(() => {
+    const placed = tables.filter(
+      (t) =>
+        t.floor_x != null &&
+        t.floor_y != null &&
+        Number.isFinite(t.floor_x) &&
+        Number.isFinite(t.floor_y),
+    );
+    const boxes = placed.map((t) => {
+      const { halfW, halfH } = kitchenWaiterShapeHalfExtents(t.layout);
+      return {
+        id: t.id,
+        x: t.floor_x as number,
+        y: t.floor_y as number,
+        halfW,
+        halfH,
+      };
+    });
+    return separateFloorBoxes(boxes, { margin: 0.06, iterations: 70, gap: 0.016 });
+  }, [tables]);
 
   return (
     <div className="mt-6">
@@ -70,23 +96,27 @@ export function WaiterTablePicker({
           aria-label="Table floor plan"
         >
           <div className="absolute inset-5 sm:inset-6">
-            {tables.map((t) => {
+            {tables.map((t, floorIndex) => {
               const fx = t.floor_x;
               const fy = t.floor_y;
               if (fx == null || fy == null || !Number.isFinite(fx) || !Number.isFinite(fy)) {
                 return null;
               }
+              const adjusted = displayPositions.get(t.id);
+              const px = adjusted?.x ?? fx;
+              const py = adjusted?.y ?? fy;
               const rot = Number.isFinite(t.floor_rotation) ? (t.floor_rotation as number) : 0;
               const openCount = openOrderCountByTableId[t.id] ?? 0;
               return (
                 <Link
                   key={t.id}
                   href={`/waiter/${eventId}/t/${t.id}`}
-                  className="absolute z-10 w-max max-w-[8rem] active:scale-[0.98]"
+                  className="absolute w-max max-w-[8rem] rounded-md outline-none ring-offset-2 ring-offset-neutral-50 transition-shadow duration-150 will-change-transform hover:z-[100] hover:shadow-xl focus-visible:ring-2 focus-visible:ring-amber-500 active:scale-[0.98] dark:ring-offset-neutral-900/80 dark:hover:shadow-2xl dark:focus-visible:ring-amber-400"
                   style={{
-                    left: `${fx * 100}%`,
-                    top: `${fy * 100}%`,
+                    left: `${px * 100}%`,
+                    top: `${py * 100}%`,
                     transform: `translate(-50%, -50%) rotate(${rot}deg)`,
+                    zIndex: 10 + floorIndex,
                   }}
                 >
                   <FloorPlanTableShape

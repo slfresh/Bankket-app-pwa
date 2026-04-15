@@ -128,6 +128,13 @@ export function useOrdersRealtime({ eventId, tableId }: UseOrdersRealtimeOptions
     }
     document.addEventListener("visibilitychange", onVisibilityChange);
 
+    /** Safety net if the Realtime socket stalls (background tabs, flaky Wi‑Fi). */
+    const pollMs = 25_000;
+    const pollTimer = window.setInterval(() => {
+      if (cancelled || document.visibilityState !== "visible") return;
+      void load({ silent: true });
+    }, pollMs);
+
     const channelName = tableId
       ? `orders:${eventId}:table:${tableId}`
       : `orders:${eventId}:kitchen`;
@@ -205,6 +212,7 @@ export function useOrdersRealtime({ eventId, tableId }: UseOrdersRealtimeOptions
 
     return () => {
       cancelled = true;
+      window.clearInterval(pollTimer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       void supabase.removeChannel(channel);
       setRealtimeState("idle");

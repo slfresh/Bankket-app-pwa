@@ -348,7 +348,7 @@ export function SeatGrid({
           <p className="text-center text-[11px] font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
             One long side
           </p>
-          <div className="flex justify-center gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+          <div className="flex min-h-0 justify-center gap-2 overflow-x-auto overflow-y-hidden pb-3 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
             {topSeats.map((seat) => (
               <div key={seat} className={seatColClass}>
                 {renderSeatButton(seat)}
@@ -368,7 +368,7 @@ export function SeatGrid({
           <p className="text-center text-[11px] font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
             Opposite long side
           </p>
-          <div className="flex justify-center gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+          <div className="flex min-h-0 justify-center gap-2 overflow-x-auto overflow-y-hidden pb-3 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
             {bottomSeats.map((seat) => (
               <div key={seat} className={seatColClass}>
                 {renderSeatButton(seat)}
@@ -392,7 +392,7 @@ export function SeatGrid({
                   <p className="text-center text-[11px] font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
                     Top leg (horizontal)
                   </p>
-                  <div className="flex justify-center gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+                  <div className="flex min-h-0 justify-center gap-2 overflow-x-auto overflow-y-hidden pb-3 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
                     {leg1.map((seat) => (
                       <div key={seat} className={seatColClass}>
                         {renderSeatButton(seat)}
@@ -407,7 +407,7 @@ export function SeatGrid({
                   <p className="text-center text-[11px] font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
                     Outer leg (vertical)
                   </p>
-                  <div className="flex justify-center gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+                  <div className="flex min-h-0 justify-center gap-2 overflow-x-auto overflow-y-hidden pb-3 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
                     {leg2.map((seat) => (
                       <div key={seat} className={seatColClass}>
                         {renderSeatButton(seat)}
@@ -422,7 +422,7 @@ export function SeatGrid({
                   <p className="text-center text-[11px] font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
                     Bottom leg (horizontal)
                   </p>
-                  <div className="flex justify-center gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+                  <div className="flex min-h-0 justify-center gap-2 overflow-x-auto overflow-y-hidden pb-3 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
                     {leg3.map((seat) => (
                       <div key={seat} className={seatColClass}>
                         {renderSeatButton(seat)}
@@ -825,79 +825,89 @@ export function SeatGrid({
                 ) : null}
               </div>
             ) : null}
-            <div className="mt-5 flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-md px-4 py-2 text-sm font-medium text-neutral-600 dark:text-neutral-300"
-                onClick={() => {
-                  setModalSeat(null);
-                  setOrderModalTip(null);
-                  setBatchSendOpen(false);
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="rounded-md border border-neutral-400 px-4 py-2 text-sm font-medium text-neutral-800 dark:border-neutral-600 dark:text-neutral-200"
-                onClick={() => {
-                  setModalSeat(null);
-                  setOrderModalTip(null);
-                  setBatchSendOpen(false);
-                }}
-              >
-                Done
-              </button>
-              <button
-                type="button"
-                disabled={pending || !selectedMenuId || itemsForSelectedCourse.length === 0}
-                className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
-                onClick={() => {
-                  startTransition(async () => {
-                    setFormError(null);
-                    const seatNum = modalSeat;
-                    const sentCourse = selectedCourse;
-                    const res = await placeOrder({
-                      eventId,
-                      tableId,
-                      seatNumber: seatNum,
-                      menuItemId: selectedMenuId,
-                      course: sentCourse,
-                      specialWishes: courseWish || null,
-                      guestKitchenNote,
-                    });
-                    if ("error" in res && res.error) {
-                      setFormError(res.error);
-                      return;
-                    }
-                    await refetch({ silent: true });
-                    await refetchNotes({ silent: true });
-                    const optimisticRows: CourseOrderRow[] = [
-                      ...orders.map((o) => ({ seat_number: o.seat_number, course: o.course })),
-                      { seat_number: seatNum, course: sentCourse },
-                    ];
-                    const nextCourse = firstAvailableCourseForSeat(
-                      seatNum,
-                      optimisticRows,
-                      menuByCourse,
-                    );
-                    if (nextCourse) {
-                      setOrderModalTip(
-                        `${menuCourseTitle(sentCourse)} sent to kitchen. Choose the next course or tap Done when finished.`,
-                      );
-                      setSelectedCourse(nextCourse);
-                      setSelectedMenuId((menuByCourse.get(nextCourse) ?? [])[0]?.id ?? "");
-                      setCourseWish("");
-                    } else {
-                      setModalSeat(null);
-                      setOrderModalTip(null);
-                      setBatchSendOpen(false);
-                    }
-                  });
-                }}
-              >
-                {pending ? "Sending…" : "Send to kitchen"}
-              </button>
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+              {missingCoursesForModalSeat.length >= 2 && batchSendOpen ? (
+                <p className="order-first text-xs text-neutral-500 dark:text-neutral-400 sm:order-none sm:mr-auto sm:max-w-[55%]">
+                  Use the green <span className="font-medium text-neutral-700 dark:text-neutral-300">Send all to kitchen</span>{" "}
+                  button for this batch — single-course send is hidden here.
+                </p>
+              ) : null}
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded-md px-4 py-2 text-sm font-medium text-neutral-600 dark:text-neutral-300"
+                  onClick={() => {
+                    setModalSeat(null);
+                    setOrderModalTip(null);
+                    setBatchSendOpen(false);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md border border-neutral-400 px-4 py-2 text-sm font-medium text-neutral-800 dark:border-neutral-600 dark:text-neutral-200"
+                  onClick={() => {
+                    setModalSeat(null);
+                    setOrderModalTip(null);
+                    setBatchSendOpen(false);
+                  }}
+                >
+                  Done
+                </button>
+                {!(missingCoursesForModalSeat.length >= 2 && batchSendOpen) ? (
+                  <button
+                    type="button"
+                    disabled={pending || !selectedMenuId || itemsForSelectedCourse.length === 0}
+                    className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+                    onClick={() => {
+                      startTransition(async () => {
+                        setFormError(null);
+                        const seatNum = modalSeat;
+                        const sentCourse = selectedCourse;
+                        const res = await placeOrder({
+                          eventId,
+                          tableId,
+                          seatNumber: seatNum,
+                          menuItemId: selectedMenuId,
+                          course: sentCourse,
+                          specialWishes: courseWish || null,
+                          guestKitchenNote,
+                        });
+                        if ("error" in res && res.error) {
+                          setFormError(res.error);
+                          return;
+                        }
+                        await refetch({ silent: true });
+                        await refetchNotes({ silent: true });
+                        const optimisticRows: CourseOrderRow[] = [
+                          ...orders.map((o) => ({ seat_number: o.seat_number, course: o.course })),
+                          { seat_number: seatNum, course: sentCourse },
+                        ];
+                        const nextCourse = firstAvailableCourseForSeat(
+                          seatNum,
+                          optimisticRows,
+                          menuByCourse,
+                        );
+                        if (nextCourse) {
+                          setOrderModalTip(
+                            `${menuCourseTitle(sentCourse)} sent to kitchen. Choose the next course or tap Done when finished.`,
+                          );
+                          setSelectedCourse(nextCourse);
+                          setSelectedMenuId((menuByCourse.get(nextCourse) ?? [])[0]?.id ?? "");
+                          setCourseWish("");
+                        } else {
+                          setModalSeat(null);
+                          setOrderModalTip(null);
+                          setBatchSendOpen(false);
+                        }
+                      });
+                    }}
+                  >
+                    {pending ? "Sending…" : "Send to kitchen"}
+                  </button>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>
