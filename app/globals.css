@@ -1,8 +1,44 @@
 @import "tailwindcss";
 
+/* Always use `dark:*` utilities when `<html class="dark">` is set (not OS preference). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #09090b;
+  --foreground: #fafafa;
+  /* Kitchen board tokens (also referenced from ticket/card UI) */
+  --radius-kitchen-card: 1rem;
+  --kitchen-card-bg: oklch(0.17 0.012 285);
+  --kitchen-danger: oklch(0.58 0.21 27);
+  --kitchen-danger-muted: oklch(0.48 0.16 27);
+  --kitchen-focus-ring: oklch(0.78 0.14 84);
+}
+
+/* Accessible focus rings on dark kitchen surfaces */
+.focus-visible-kitchen:focus-visible {
+  outline: 2px solid var(--kitchen-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Late-order badge pulse — disabled when user prefers reduced motion */
+@keyframes kitchen-age-pulse-opacity {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.72;
+  }
+}
+
+.kitchen-age-pulse {
+  animation: kitchen-age-pulse-opacity 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kitchen-age-pulse {
+    animation: none;
+  }
 }
 
 @theme inline {
@@ -10,19 +46,25 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  /* Brand accent (primary actions) */
+  --color-accent: oklch(0.63 0.19 41);
+  --color-accent-foreground: oklch(0.985 0 0);
+  /* Kitchen / dark surfaces */
+  --color-surface-kitchen: oklch(0.13 0.01 285);
+  --color-surface-kitchen-elevated: oklch(0.17 0.012 285);
+  --color-border-kitchen: oklch(0.27 0.015 285);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  touch-action: manipulation;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 /* Floor plan: print only the diagram (manager event page). */

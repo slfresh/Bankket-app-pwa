@@ -80,8 +80,8 @@ export function RealtimeConnectionBanner({
               type="button"
               className={
                 isKitchen
-                  ? "rounded-md border border-amber-600 px-3 py-1 text-xs font-medium text-amber-50 hover:bg-amber-900/50"
-                  : "rounded-md border border-amber-300 px-3 py-1 text-xs font-medium text-amber-950 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-100 dark:hover:bg-amber-900/50"
+                  ? "min-h-[44px] rounded-md border border-amber-600 px-3 py-2 text-xs font-medium text-amber-50 hover:bg-amber-900/50"
+                  : "min-h-[44px] rounded-md border border-amber-300 px-3 py-2 text-xs font-medium text-amber-950 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-100 dark:hover:bg-amber-900/50"
               }
               onClick={() => void onRefresh()}
             >

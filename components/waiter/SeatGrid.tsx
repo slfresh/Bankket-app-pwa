@@ -1,8 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import type { MenuCourse, TableLayout } from "@/lib/database.types";
 import { useOrdersRealtime, type OrderWithRelations } from "@/hooks/useOrdersRealtime";
+import {
+  buildPlaceholderOrderRow,
+  optimisticOrderId,
+} from "@/lib/orders/order-with-relations";
+import { toast as sonnerToast } from "sonner";
 import type { LShapeLayoutConfig } from "@/lib/domain/seat-layout";
 import { lShapeLegCounts } from "@/lib/domain/seat-layout";
 import {
@@ -54,14 +59,49 @@ function seatOrderStatus(
   return "partial";
 }
 
-function compactSeatButtonClass(status: "empty" | "partial" | "full"): string {
+/** Kitchen pipeline for this seat’s dish tickets (waiter view includes served rows). */
+type SeatKitchenFlow = "none" | "kitchen" | "ready" | "served";
+
+function seatKitchenFlowStatus(seat: number, orders: readonly OrderWithRelations[]): SeatKitchenFlow {
+  const list = orders.filter((o) => o.seat_number === seat);
+  if (list.length === 0) return "none";
+  if (list.some((o) => o.status === "pending")) return "kitchen";
+  if (list.some((o) => o.status === "cooked")) return "ready";
+  if (list.every((o) => o.status === "served")) return "served";
+  return "kitchen";
+}
+
+function kitchenFlowDotClass(flow: SeatKitchenFlow): string {
+  switch (flow) {
+    case "none":
+      return "h-2.5 w-2.5 rounded-full border-2 border-neutral-500 bg-transparent";
+    case "kitchen":
+      return "h-2.5 w-2.5 rounded-full bg-neutral-500";
+    case "ready":
+      return "h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.85)] animate-pulse";
+    case "served":
+      return "h-2.5 w-2.5 rounded-full bg-emerald-600";
+  }
+}
+
+function compactSeatButtonClass(menuFill: "empty" | "partial" | "full", flow: SeatKitchenFlow): string {
+  const base =
+    "relative flex min-h-[48px] w-full flex-col items-center justify-center gap-0.5 rounded-lg border px-1 py-1 text-center text-xs font-semibold transition active:scale-[0.98] disabled:opacity-60";
+
   const tone =
-    status === "full"
-      ? "border-emerald-600 bg-emerald-500/15 text-emerald-900 dark:border-emerald-500 dark:text-emerald-100"
-      : status === "partial"
-        ? "border-amber-600 bg-amber-500/10 text-amber-950 dark:border-amber-500 dark:text-amber-100"
-        : "border-neutral-200 bg-white text-neutral-900 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100";
-  return `flex min-h-[48px] w-full flex-col items-center justify-center gap-0.5 rounded-lg border px-1 py-1 text-center text-xs font-semibold transition active:scale-[0.98] disabled:opacity-60 ${tone}`;
+    flow === "served"
+      ? "border-emerald-700 bg-emerald-950/45 text-emerald-50"
+      : flow === "ready"
+        ? "border-emerald-500/80 bg-emerald-950/30 text-emerald-50"
+        : flow === "kitchen"
+          ? "border-neutral-600 bg-neutral-900 text-neutral-100"
+          : menuFill === "full"
+            ? "border-neutral-600 bg-neutral-900 text-neutral-100"
+            : menuFill === "partial"
+              ? "border-amber-700/60 bg-amber-950/25 text-amber-50"
+              : "border-neutral-700 bg-neutral-950 text-neutral-200";
+
+  return `${base} ${tone}`;
 }
 
 type SeatGridProps = {
@@ -97,7 +137,30 @@ export function SeatGrid({
   const { orders, loading, error, realtimeState, realtimeMessage, refetch } = useOrdersRealtime({
     eventId,
     tableId,
+    includeServed: Boolean(tableId),
   });
+
+  type WaiterOptimisticAction =
+    | { type: "add"; rows: OrderWithRelations[] }
+    | { type: "remove"; orderId: string };
+
+  const [displayOrders, applyWaiterOptimistic] = useOptimistic(
+    orders,
+    (current, action: WaiterOptimisticAction) => {
+      if (action.type === "remove") {
+        return current.filter((o) => o.id !== action.orderId);
+      }
+      const incomingIds = new Set(action.rows.map((r) => r.id));
+      const base = current.filter((o) => !incomingIds.has(o.id));
+      return [...base, ...action.rows].sort(
+        (a, b) =>
+          a.seat_number - b.seat_number ||
+          menuCourseSortIndex(a.course) - menuCourseSortIndex(b.course) ||
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      );
+    },
+  );
+
   const {
     bySeatNumber: guestNotesBySeat,
     refetch: refetchNotes,
@@ -128,7 +191,7 @@ export function SeatGrid({
 
   const bySeatOrders = useMemo(() => {
     const map = new Map<number, OrderWithRelations[]>();
-    for (const o of orders) {
+    for (const o of displayOrders) {
       const list = map.get(o.seat_number) ?? [];
       list.push(o);
       map.set(o.seat_number, list);
@@ -137,7 +200,7 @@ export function SeatGrid({
       map.set(seat, sortOrdersForSeat(list));
     }
     return map;
-  }, [orders]);
+  }, [displayOrders]);
 
   const menuByCourse = useMemo(() => {
     const m = new Map<MenuCourse, MenuItem[]>();
@@ -153,7 +216,7 @@ export function SeatGrid({
   const seats = Array.from({ length: totalSeats }, (_, i) => i + 1);
 
   function firstAvailableCourse(seat: number): MenuCourse | null {
-    return firstAvailableCourseForSeat(seat, orders, menuByCourse);
+    return firstAvailableCourseForSeat(seat, displayOrders, menuByCourse);
   }
 
   function openDetailSheet(seat: number) {
@@ -206,9 +269,9 @@ export function SeatGrid({
     return MENU_COURSE_ORDER.filter((c) => {
       const items = menuByCourse.get(c) ?? [];
       if (items.length === 0) return false;
-      return !orders.some((o) => o.seat_number === modalSeat && o.course === c);
+      return !displayOrders.some((o) => o.seat_number === modalSeat && o.course === c);
     });
-  }, [modalSeat, orders, menuByCourse]);
+  }, [modalSeat, displayOrders, menuByCourse]);
 
   /** Multi-course batch panel replaces the single-course pickers so Starter is not shown twice. */
   const orderModalBatchMode =
@@ -291,20 +354,36 @@ export function SeatGrid({
   }, [modalSeat, detailSeat, noteModalSeat, cancelOrderId, readOnly]);
 
   function renderSeatButton(seat: number) {
-    const status = seatOrderStatus(seat, orders, menuByCourse);
+    const menuFill = seatOrderStatus(seat, displayOrders, menuByCourse);
+    const flow = seatKitchenFlowStatus(seat, displayOrders);
     const guestLine = guestNotesBySeat.get(seat)?.kitchen_notice?.trim();
     const statusLabel =
-      status === "empty" ? "No orders" : status === "partial" ? "Partial" : "All courses";
+      flow === "none"
+        ? menuFill === "empty"
+          ? "No orders"
+          : menuFill === "partial"
+            ? "Partial"
+            : "All courses"
+        : flow === "kitchen"
+          ? "In kitchen"
+          : flow === "ready"
+            ? "Ready · pickup"
+            : "Served";
     return (
       <button
         type="button"
         disabled={pending}
         onClick={() => openDetailSheet(seat)}
-        className={compactSeatButtonClass(status)}
+        className={compactSeatButtonClass(menuFill, flow)}
         aria-label={`Seat ${seat}, ${statusLabel}${guestLine ? ", has guest kitchen note" : ""}. Open seat details.`}
       >
+        <span
+          className={`absolute right-1 top-1 ${kitchenFlowDotClass(flow)}`}
+          title={statusLabel}
+          aria-hidden
+        />
         <span className="leading-tight">Seat {seat}</span>
-        <span className="flex items-center justify-center gap-1 text-[10px] font-normal leading-tight text-neutral-600 dark:text-neutral-400">
+        <span className="flex items-center justify-center gap-1 text-[10px] font-normal leading-tight text-neutral-400">
           <span className="truncate">{statusLabel}</span>
           {guestLine ? (
             <span
@@ -700,7 +779,7 @@ export function SeatGrid({
                     {MENU_COURSE_ORDER.filter((c) => {
                       const items = menuByCourse.get(c) ?? [];
                       if (items.length === 0) return false;
-                      return !orders.some((o) => o.seat_number === modalSeat && o.course === c);
+                      return !displayOrders.some((o) => o.seat_number === modalSeat && o.course === c);
                     }).map((c) => (
                       <option key={c} value={c}>
                         {menuCourseTitle(c)}
@@ -820,16 +899,34 @@ export function SeatGrid({
                             setFormError("Pick a dish for every course in the batch.");
                             return;
                           }
+                          const seatNum = modalSeat;
+                          const optimisticRows: OrderWithRelations[] = lines.map((line) => {
+                            const label =
+                              menuItems.find((m) => m.id === line.menuItemId)?.label ?? "—";
+                            return buildPlaceholderOrderRow({
+                              tempId: optimisticOrderId(),
+                              eventId,
+                              tableId,
+                              tableName,
+                              seatNumber: seatNum,
+                              menuItemId: line.menuItemId,
+                              course: line.course,
+                              special_wishes: line.specialWishes ?? null,
+                              menuLabel: label,
+                            });
+                          });
+                          applyWaiterOptimistic({ type: "add", rows: optimisticRows });
                           const res = await placeSeatOrdersBatch({
                             eventId,
                             tableId,
-                            seatNumber: modalSeat,
+                            seatNumber: seatNum,
                             guestKitchenNote,
                             lines,
                           });
                           if ("error" in res && res.error) {
                             setFormError(res.error);
-                            return;
+                            sonnerToast.error(res.error);
+                            throw new Error(res.error);
                           }
                           await refetch({ silent: true });
                           await refetchNotes({ silent: true });
@@ -887,6 +984,24 @@ export function SeatGrid({
                         setFormError(null);
                         const seatNum = modalSeat;
                         const sentCourse = selectedCourse;
+                        const label =
+                          menuItems.find((m) => m.id === selectedMenuId)?.label ?? "—";
+                        applyWaiterOptimistic({
+                          type: "add",
+                          rows: [
+                            buildPlaceholderOrderRow({
+                              tempId: optimisticOrderId(),
+                              eventId,
+                              tableId,
+                              tableName,
+                              seatNumber: seatNum,
+                              menuItemId: selectedMenuId,
+                              course: sentCourse,
+                              special_wishes: courseWish?.trim() || null,
+                              menuLabel: label,
+                            }),
+                          ],
+                        });
                         const res = await placeOrder({
                           eventId,
                           tableId,
@@ -898,7 +1013,8 @@ export function SeatGrid({
                         });
                         if ("error" in res && res.error) {
                           setFormError(res.error);
-                          return;
+                          sonnerToast.error(res.error);
+                          throw new Error(res.error);
                         }
                         await refetch({ silent: true });
                         await refetchNotes({ silent: true });
@@ -1045,16 +1161,19 @@ export function SeatGrid({
                 onClick={() => {
                   startTransition(async () => {
                     setFormError(null);
+                    const id = cancelOrderId;
+                    applyWaiterOptimistic({ type: "remove", orderId: id });
                     const res = await cancelPendingOrder({
                       eventId,
                       tableId,
-                      orderId: cancelOrderId,
+                      orderId: id,
                     });
-                    setCancelOrderId(null);
                     if ("error" in res && res.error) {
                       setFormError(res.error);
-                      return;
+                      sonnerToast.error(res.error);
+                      throw new Error(res.error);
                     }
+                    setCancelOrderId(null);
                     await refetch({ silent: true });
                   });
                 }}

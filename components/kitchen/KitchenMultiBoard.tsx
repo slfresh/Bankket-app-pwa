@@ -1,22 +1,37 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import {
+  useCallback,
+  useMemo,
+  useOptimistic,
+  useState,
+  useTransition,
+  useEffect,
+} from "react";
 import { useKitchenMultiOrdersRealtime } from "@/hooks/useKitchenMultiOrdersRealtime";
 import { useKitchenNewOrderPing } from "@/hooks/useKitchenNewOrderPing";
 import { useSeatGuestNotesForEvents } from "@/hooks/useSeatGuestNotesRealtime";
-import { menuCourseSortIndex, menuCourseTitle } from "@/lib/domain/menu-course";
+import { menuCourseSortIndex } from "@/lib/domain/menu-course";
 import {
   isKitchenSoundMuted,
   primeKitchenAudio,
   setKitchenSoundMuted,
 } from "@/lib/kitchen/play-beep";
+import { toast as sonnerToast } from "sonner";
 import { advanceOrderStatus } from "@/lib/actions/kitchen";
 import { RealtimeConnectionBanner } from "@/components/staff/RealtimeConnectionBanner";
 import type { OrderWithRelations } from "@/hooks/useOrdersRealtime";
+import { useReadyFlash } from "@/hooks/useReadyFlash";
+import { KitchenTableTicket } from "@/components/kitchen/KitchenTableTicket";
+import { guestFingerprintForTableRows } from "@/lib/kitchen/order-board-utils";
 
 type EventMeta = { id: string; name: string };
 
 type StatusFilter = "all" | "pending" | "cooked";
+
+type KitchenOptimisticPatch =
+  | { orderId: string; nextStatus: "cooked" | "served" }
+  | { type: "bulk_cooked"; orderIds: string[] };
 
 export function KitchenMultiBoard({ events }: { events: EventMeta[] }) {
   const eventIds = useMemo(() => events.map((e) => e.id), [events]);
@@ -28,6 +43,30 @@ export function KitchenMultiBoard({ events }: { events: EventMeta[] }) {
 
   const { orders, loading, error, realtimeState, realtimeMessage, refetch } =
     useKitchenMultiOrdersRealtime(eventIds);
+
+  const [displayOrders, applyKitchenOptimistic] = useOptimistic(
+    orders,
+    (current, patch: KitchenOptimisticPatch) => {
+      if ("type" in patch && patch.type === "bulk_cooked") {
+        const set = new Set(patch.orderIds);
+        return current.map((o) =>
+          set.has(o.id) && o.status === "pending"
+            ? { ...o, status: "cooked" as const, updated_at: new Date().toISOString() }
+            : o,
+        );
+      }
+      const p = patch as { orderId: string; nextStatus: "cooked" | "served" };
+      if (p.nextStatus === "served") {
+        return current.filter((o) => o.id !== p.orderId);
+      }
+      return current.map((o) =>
+        o.id === p.orderId
+          ? { ...o, status: "cooked" as const, updated_at: new Date().toISOString() }
+          : o,
+      );
+    },
+  );
+
   const {
     byEventTableSeat,
     loading: notesLoading,
@@ -36,24 +75,24 @@ export function KitchenMultiBoard({ events }: { events: EventMeta[] }) {
 
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [pendingId, setPendingId] = useState<string | null>(null);
-  const [rpcError, setRpcError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [soundMuted, setSoundMuted] = useState(false);
+  const { readyFlashOrderIds, flashReadyIds } = useReadyFlash();
 
   useEffect(() => {
     setSoundMuted(isKitchenSoundMuted());
   }, []);
 
   const pendingOnly = useMemo(
-    () => orders.filter((o) => o.status === "pending"),
-    [orders],
+    () => displayOrders.filter((o) => o.status === "pending"),
+    [displayOrders],
   );
   const { toast, dismissToast } = useKitchenNewOrderPing(pendingOnly);
 
   const filteredOrders = useMemo(() => {
-    if (statusFilter === "all") return orders;
-    return orders.filter((o) => o.status === statusFilter);
-  }, [orders, statusFilter]);
+    if (statusFilter === "all") return displayOrders;
+    return displayOrders.filter((o) => o.status === statusFilter);
+  }, [displayOrders, statusFilter]);
 
   const filteredByEventTable = useMemo(() => {
     const map = new Map<string, Map<string, OrderWithRelations[]>>();
@@ -86,17 +125,46 @@ export function KitchenMultiBoard({ events }: { events: EventMeta[] }) {
     return Array.from(map.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   }, [filteredOrders]);
 
-  const advance = useCallback((orderId: string, nextStatus: "cooked" | "served") => {
-    startTransition(async () => {
-      setRpcError(null);
-      setPendingId(orderId);
-      const res = await advanceOrderStatus({ orderId, nextStatus });
-      setPendingId(null);
-      if ("error" in res) {
-        setRpcError(res.error ?? "Something went wrong. Please try again.");
-      }
-    });
-  }, []);
+  const advance = useCallback(
+    (orderId: string, nextStatus: "cooked" | "served") => {
+      startTransition(async () => {
+        setPendingId(orderId);
+        applyKitchenOptimistic({ orderId, nextStatus });
+        const res = await advanceOrderStatus({ orderId, nextStatus });
+        setPendingId(null);
+        if ("error" in res) {
+          const msg = res.error ?? "Something went wrong. Please try again.";
+          sonnerToast.error(msg);
+          throw new Error(msg);
+        }
+        if (nextStatus === "cooked") {
+          flashReadyIds([orderId]);
+        }
+      });
+    },
+    [applyKitchenOptimistic, flashReadyIds],
+  );
+
+  const advanceCoursePending = useCallback(
+    (orderIds: string[]) => {
+      const ids = orderIds.filter(Boolean);
+      if (ids.length === 0) return;
+      startTransition(async () => {
+        applyKitchenOptimistic({ type: "bulk_cooked", orderIds: ids });
+        const results = await Promise.all(
+          ids.map((orderId) => advanceOrderStatus({ orderId, nextStatus: "cooked" })),
+        );
+        const failed = results.find((r) => "error" in r) as { error?: string } | undefined;
+        if (failed && "error" in failed) {
+          const msg = failed.error ?? "Something went wrong. Please try again.";
+          sonnerToast.error(msg);
+          throw new Error(msg);
+        }
+        flashReadyIds(ids);
+      });
+    },
+    [applyKitchenOptimistic, flashReadyIds],
+  );
 
   const sortedEventIds = useMemo(
     () =>
@@ -116,7 +184,7 @@ export function KitchenMultiBoard({ events }: { events: EventMeta[] }) {
 
   return (
     <div
-      className="relative pb-28 sm:pb-32"
+      className="relative pb-[max(7rem,env(safe-area-inset-bottom,0px)+5.5rem)] sm:pb-[max(8rem,env(safe-area-inset-bottom,0px)+6rem)]"
       onPointerDown={() => {
         primeKitchenAudio();
       }}
@@ -159,10 +227,10 @@ export function KitchenMultiBoard({ events }: { events: EventMeta[] }) {
             key={key}
             type="button"
             onClick={() => setStatusFilter(key)}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold capitalize ${
+            className={`min-h-[44px] rounded-lg px-4 py-2 text-sm font-semibold capitalize ${
               statusFilter === key
-                ? "bg-white text-neutral-950"
-                : "border border-neutral-700 bg-neutral-900 text-neutral-300"
+                ? "bg-accent text-accent-foreground"
+                : "border border-border-kitchen bg-surface-kitchen-elevated text-zinc-300"
             }`}
           >
             {key === "cooked" ? "Cooking" : key}
@@ -176,11 +244,6 @@ export function KitchenMultiBoard({ events }: { events: EventMeta[] }) {
       {notesError ? (
         <p className="mb-4 rounded-lg bg-red-950 px-4 py-3 text-lg text-red-200">
           Guest notes: {notesError}
-        </p>
-      ) : null}
-      {rpcError ? (
-        <p role="alert" className="mb-4 rounded-lg bg-red-950 px-4 py-3 text-lg text-red-200">
-          {rpcError}
         </p>
       ) : null}
       {loadingBoard ? (
@@ -202,91 +265,32 @@ export function KitchenMultiBoard({ events }: { events: EventMeta[] }) {
               <h2 className="mb-4 border-b border-neutral-700 pb-2 text-2xl font-bold text-white">
                 {evName}
               </h2>
-              <div className="grid gap-6 lg:grid-cols-3 xl:grid-cols-4">
+              <ul className="grid list-none gap-6 lg:grid-cols-3 xl:grid-cols-4">
                 {tableEntries.map(([tableId, rows]) => {
                   const tableName = rows[0]?.banquet_tables?.name ?? "Table";
                   return (
-                    <section
-                      key={tableId}
-                      className="rounded-2xl border border-neutral-800 bg-neutral-900/80 p-4 shadow-inner"
-                    >
-                      <h3 className="border-b border-neutral-800 pb-3 text-xl font-semibold text-white">
-                        {tableName}
-                      </h3>
-                      <ul className="mt-4 space-y-4">
-                        {rows.map((o) => {
-                          const guestLine = byEventTableSeat
-                            .get(`${eventId}:${tableId}:${o.seat_number}`)
-                            ?.trim();
-                          return (
-                          <li
-                            key={o.id}
-                            className="rounded-xl border border-neutral-800 bg-neutral-950 p-4"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <p className="text-2xl font-bold text-white">Seat {o.seat_number}</p>
-                                <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-                                  {menuCourseTitle(o.course)}
-                                </p>
-                                <p className="text-xl font-medium text-amber-100">
-                                  {o.menu_items?.label ?? "—"}
-                                </p>
-                                {guestLine ? (
-                                  <div className="mt-2 rounded-md border border-red-900/50 bg-red-950/40 px-2 py-1.5">
-                                    <p className="text-[10px] font-bold uppercase tracking-wide text-red-400">
-                                      Guest · allergies · all courses
-                                    </p>
-                                    <p className="mt-0.5 text-sm font-semibold leading-snug text-red-200">
-                                      {guestLine}
-                                    </p>
-                                  </div>
-                                ) : null}
-                                {o.special_wishes ? (
-                                  <div className="mt-2">
-                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
-                                      This plate only
-                                    </p>
-                                    <p className="mt-0.5 text-sm leading-snug text-neutral-400">
-                                      {o.special_wishes}
-                                    </p>
-                                  </div>
-                                ) : null}
-                                <p className="mt-3 text-sm uppercase tracking-widest text-neutral-500">
-                                  {o.status}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="mt-4 flex flex-wrap gap-3">
-                              {o.status === "pending" ? (
-                                <button
-                                  type="button"
-                                  disabled={isPending && pendingId === o.id}
-                                  onClick={() => advance(o.id, "cooked")}
-                                  className="min-h-[48px] flex-1 rounded-xl bg-amber-500 px-4 py-3 text-lg font-semibold text-neutral-950 disabled:opacity-50"
-                                >
-                                  Cooked
-                                </button>
-                              ) : null}
-                              {o.status === "cooked" ? (
-                                <button
-                                  type="button"
-                                  disabled={isPending && pendingId === o.id}
-                                  onClick={() => advance(o.id, "served")}
-                                  className="min-h-[48px] flex-1 rounded-xl bg-emerald-500 px-4 py-3 text-lg font-semibold text-neutral-950 disabled:opacity-50"
-                                >
-                                  Served
-                                </button>
-                              ) : null}
-                            </div>
-                          </li>
-                          );
-                        })}
-                      </ul>
-                    </section>
+                    <li key={`${eventId}:${tableId}`} className="list-none">
+                      <KitchenTableTicket
+                        eventId={eventId}
+                        tableId={tableId}
+                        tableName={tableName}
+                        rows={rows}
+                        guestFingerprint={guestFingerprintForTableRows(tableId, rows, (_tid, seat) =>
+                          byEventTableSeat.get(`${eventId}:${tableId}:${seat}`)?.trim() ?? "",
+                        )}
+                        guestNotice={(seat) =>
+                          byEventTableSeat.get(`${eventId}:${tableId}:${seat}`)?.trim() || null
+                        }
+                        advance={advance}
+                        advanceCoursePending={advanceCoursePending}
+                        pendingId={pendingId}
+                        isPending={isPending}
+                        readyFlashOrderIds={readyFlashOrderIds}
+                      />
+                    </li>
                   );
                 })}
-              </div>
+              </ul>
             </section>
           );
         })}
@@ -294,13 +298,13 @@ export function KitchenMultiBoard({ events }: { events: EventMeta[] }) {
 
       {!loadingBoard && filteredOrders.length === 0 ? (
         <p className="mt-10 text-2xl text-neutral-500">
-          {orders.length === 0
+          {displayOrders.length === 0
             ? "No open orders for these events."
             : "No orders in this filter."}
         </p>
       ) : null}
 
-      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-neutral-800 bg-neutral-950 px-2 py-4 shadow-[0_-12px_32px_rgba(0,0,0,0.55)] sm:px-4">
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-border-kitchen bg-surface-kitchen/95 px-2 py-4 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] shadow-[0_-12px_32px_rgba(0,0,0,0.55)] backdrop-blur-md supports-[backdrop-filter]:bg-surface-kitchen/90 sm:px-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-amber-500/90">
           Totals (current filter, all events)
         </p>
@@ -309,7 +313,7 @@ export function KitchenMultiBoard({ events }: { events: EventMeta[] }) {
         ) : (
           <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-lg font-semibold text-white">
             {mealTotals.map(([label, count]) => (
-              <span key={label}>
+              <span key={label} className="tabular-nums">
                 {count}× {label}
               </span>
             ))}

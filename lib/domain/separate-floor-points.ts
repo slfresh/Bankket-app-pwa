@@ -114,8 +114,8 @@ export function separateFloorBoxes(
   for (let iter = 0; iter < iterations; iter++) {
     for (let i = 0; i < work.length; i++) {
       for (let j = i + 1; j < work.length; j++) {
-        const a = work[i];
-        const b = work[j];
+        const a = work[i]!;
+        const b = work[j]!;
         const cx = b.x - a.x;
         const cy = b.y - a.y;
         const overlapX = a.halfW + b.halfW + gap - Math.abs(cx);
@@ -178,8 +178,8 @@ export function separateFloorPoints(
   for (let iter = 0; iter < iterations; iter++) {
     for (let i = 0; i < work.length; i++) {
       for (let j = i + 1; j < work.length; j++) {
-        const a = work[i];
-        const b = work[j];
+        const a = work[i]!;
+        const b = work[j]!;
         let dx = b.x - a.x;
         let dy = b.y - a.y;
         let dist = Math.hypot(dx, dy);

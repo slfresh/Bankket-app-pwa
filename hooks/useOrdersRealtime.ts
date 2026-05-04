@@ -2,22 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import type { MenuCourse, OrderStatus } from "@/lib/database.types";
+import type { OrderStatus } from "@/lib/database.types";
+import {
+  normalizeOrderRow,
+  type OrderWithRelations,
+} from "@/lib/orders/order-with-relations";
 
-export type OrderWithRelations = {
-  id: string;
-  event_id: string;
-  table_id: string;
-  seat_number: number;
-  menu_item_id: string;
-  course: MenuCourse;
-  special_wishes: string | null;
-  status: OrderStatus;
-  created_at: string;
-  updated_at: string;
-  menu_items: { label: string } | null;
-  banquet_tables: { name: string } | null;
-};
+export type { OrderWithRelations };
 
 export type RealtimeConnectionState =
   | "idle"
@@ -29,29 +20,12 @@ export type RealtimeConnectionState =
 type UseOrdersRealtimeOptions = {
   eventId: string;
   tableId?: string;
+  /**
+   * Waiter table view: keep `served` rows so seats can show a solid “served” state.
+   * Kitchen views should omit this (default).
+   */
+  includeServed?: boolean;
 };
-
-function normalizeRow(raw: Record<string, unknown>): OrderWithRelations {
-  const menu_items = raw.menu_items as { label: string } | null | undefined;
-  const banquet_tables = raw.banquet_tables as { name: string } | null | undefined;
-  const courseRaw = raw.course as string | undefined;
-  const course: MenuCourse =
-    courseRaw === "starter" || courseRaw === "dessert" ? courseRaw : "main";
-  return {
-    id: String(raw.id),
-    event_id: String(raw.event_id),
-    table_id: String(raw.table_id),
-    seat_number: Number(raw.seat_number),
-    menu_item_id: String(raw.menu_item_id),
-    course,
-    special_wishes: (raw.special_wishes as string | null) ?? null,
-    status: raw.status as OrderStatus,
-    created_at: String(raw.created_at),
-    updated_at: String(raw.updated_at),
-    menu_items: menu_items ?? null,
-    banquet_tables: banquet_tables ?? null,
-  };
-}
 
 function mapChannelStatus(
   status: string,
@@ -74,7 +48,7 @@ function mapChannelStatus(
   }
 }
 
-export function useOrdersRealtime({ eventId, tableId }: UseOrdersRealtimeOptions) {
+export function useOrdersRealtime({ eventId, tableId, includeServed = false }: UseOrdersRealtimeOptions) {
   const [orders, setOrders] = useState<OrderWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -95,8 +69,11 @@ export function useOrdersRealtime({ eventId, tableId }: UseOrdersRealtimeOptions
         .from("orders")
         .select("*, menu_items(label), banquet_tables(name)")
         .eq("event_id", eventId)
-        .neq("status", "served")
         .order("created_at", { ascending: true });
+
+      if (!includeServed) {
+        query = query.neq("status", "served");
+      }
 
       if (tableId) {
         query = query.eq("table_id", tableId);
@@ -110,7 +87,7 @@ export function useOrdersRealtime({ eventId, tableId }: UseOrdersRealtimeOptions
         setError(qError.message);
         setOrders([]);
       } else {
-        setOrders((data ?? []).map((r) => normalizeRow(r as Record<string, unknown>)));
+        setOrders((data ?? []).map((r) => normalizeOrderRow(r as Record<string, unknown>)));
       }
       if (!opts?.silent) {
         setLoading(false);
@@ -136,7 +113,7 @@ export function useOrdersRealtime({ eventId, tableId }: UseOrdersRealtimeOptions
     }, pollMs);
 
     const channelName = tableId
-      ? `orders:${eventId}:table:${tableId}`
+      ? `orders:${eventId}:table:${tableId}${includeServed ? ":served" : ""}`
       : `orders:${eventId}:kitchen`;
     const channel = supabase
       .channel(channelName)
@@ -168,7 +145,7 @@ export function useOrdersRealtime({ eventId, tableId }: UseOrdersRealtimeOptions
           if (tableId && incoming.table_id !== tableId) {
             return;
           }
-          if (incoming.status === "served") {
+          if (incoming.status === "served" && !includeServed) {
             setOrders((prev) => prev.filter((o) => o.id !== String(incoming.id)));
             return;
           }
@@ -183,8 +160,8 @@ export function useOrdersRealtime({ eventId, tableId }: UseOrdersRealtimeOptions
             return;
           }
 
-          const row = normalizeRow(data as Record<string, unknown>);
-          if (row.status === "served") {
+          const row = normalizeOrderRow(data as Record<string, unknown>);
+          if (row.status === "served" && !includeServed) {
             setOrders((prev) => prev.filter((o) => o.id !== row.id));
             return;
           }
@@ -218,7 +195,7 @@ export function useOrdersRealtime({ eventId, tableId }: UseOrdersRealtimeOptions
       setRealtimeState("idle");
       setRealtimeMessage(null);
     };
-  }, [eventId, tableId]);
+  }, [eventId, tableId, includeServed]);
 
   const refetch = useCallback((opts?: { silent?: boolean }) => {
     return loadOrdersRef.current(opts);

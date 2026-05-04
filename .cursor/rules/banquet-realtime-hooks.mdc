@@ -6,5 +6,5 @@ alwaysApply: false
 
 # Realtime hooks
 
-- **`useOrdersRealtime`**: initial `select` for `orders` with `menu_items(label)` and `banquet_tables(name)` for the event; subscribe to `postgres_changes` on `orders` with `event_id=eq.<eventId>`. Merge **INSERT** and **UPDATE** payloads into state by `id`. Optional `tableId` filters client-side so waiter views ignore other tables.
+- **`useOrdersRealtime`**: initial `select` for `orders` with `menu_items(label)` and `banquet_tables(name)` for the event; subscribe to `postgres_changes` on `orders` with `event_id=eq.<eventId>`. Merge **INSERT** and **UPDATE** payloads into state by `id`. Optional `tableId` filters client-side so waiter views ignore other tables. Pass **`includeServed: true`** with `tableId` when the waiter seat map should keep **served** rows (kitchen list views omit this; default excludes served).
 - Always unsubscribe / remove channel on unmount.

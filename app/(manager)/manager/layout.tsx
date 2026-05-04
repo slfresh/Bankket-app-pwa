@@ -18,20 +18,20 @@ export default async function ManagerLayout({
   }
 
   return (
-    <div className="flex min-h-dvh flex-1 flex-col">
-      <header className="flex items-center justify-between gap-4 border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
+    <div className="flex min-h-dvh flex-1 flex-col bg-neutral-950 text-neutral-100">
+      <header className="flex items-center justify-between gap-4 border-b border-neutral-800 bg-neutral-950 px-4 py-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium">
           <StaffAreaNav current="manager" role={profile.role} />
           <Link
             href="/manager/events/new"
-            className="text-neutral-600 underline dark:text-neutral-400"
+            className="inline-flex min-h-[44px] items-center rounded-md px-2 py-1 text-neutral-400 underline outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-950"
           >
             New event
           </Link>
         </div>
-        <SignOutButton className="text-sm text-neutral-600 underline dark:text-neutral-400" />
+        <SignOutButton className="min-h-[44px] rounded-md px-2 py-1 text-sm text-neutral-400 underline outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-950" />
       </header>
-      <div className="flex-1">{children}</div>
+      <div id="main-content" className="flex-1">{children}</div>
     </div>
   );
 }

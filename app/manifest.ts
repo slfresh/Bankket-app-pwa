@@ -7,9 +7,9 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Hotel banquet ordering for waiters and kitchen",
     start_url: "/",
     display: "standalone",
-    background_color: "#0a0a0a",
-    theme_color: "#171717",
-    orientation: "portrait-primary",
+    background_color: "#09090b",
+    theme_color: "#09090b",
+    orientation: "any",
     icons: [
       {
         src: "/icon.svg",

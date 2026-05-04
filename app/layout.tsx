@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { StaffToaster } from "@/components/StaffToaster";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -23,7 +24,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#171717",
+  themeColor: "#09090b",
   width: "device-width",
   initialScale: 1,
 };
@@ -36,11 +37,18 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col font-sans" suppressHydrationWarning>
+      <body className="min-h-full flex flex-col bg-background font-sans text-foreground" suppressHydrationWarning>
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[200] focus:rounded-lg focus:bg-accent focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-accent-foreground focus:outline-none"
+        >
+          Skip to content
+        </a>
         {children}
+        <StaffToaster />
       </body>
     </html>
   );

@@ -25,6 +25,11 @@ type KitchenEventFloorProps = {
   tables: KitchenFloorTableRow[];
   /** Pending + cooked counts per table (same idea as waiter "open"). From full order list, not the status filter. */
   openOrderCountByTableId: Record<string, number>;
+  /** List-side hover highlights this table on the map */
+  highlightedTableId?: string | null;
+  /** Map selection filters the ticket list to this table (same id again clears) */
+  selectedTableFilterId?: string | null;
+  onTableMapToggleFilter?: (tableId: string) => void;
 };
 
 function layoutLabel(layout: TableLayout): string {
@@ -37,15 +42,22 @@ function TableSilhouette({
   table,
   openCount,
   tableHref,
+  isHighlighted,
+  isFilterSelected,
+  onMapPress,
 }: {
   table: KitchenFloorTableRow;
   openCount: number;
   tableHref: string;
+  isHighlighted: boolean;
+  isFilterSelected: boolean;
+  onMapPress: () => void;
 }) {
   const label =
     openCount > 0
-      ? `${table.name}, ${openCount} open kitchen tickets — open seat map (view only)`
-      : `${table.name}, no open kitchen tickets — open seat map (view only)`;
+      ? `${table.name}, ${openCount} open kitchen tickets. Tap table to filter ticket list. Seat map opens from link below.`
+      : `${table.name}, no open kitchen tickets. Tap to filter list. Seat map from link below.`;
+
   const inner = (
     <FloorPlanTableShape
       layout={table.layout}
@@ -61,18 +73,43 @@ function TableSilhouette({
       ) : null}
     </FloorPlanTableShape>
   );
+
+  const ringClass = isHighlighted
+    ? "shadow-[0_0_22px_rgba(34,211,238,0.55)] ring-2 ring-cyan-400"
+    : isFilterSelected
+      ? "shadow-[0_0_18px_rgba(251,191,36,0.45)] ring-2 ring-amber-400"
+      : "ring-0";
+
   return (
-    <Link
-      href={tableHref}
-      className="block w-max max-w-[8rem] rounded-md outline-none ring-offset-2 ring-offset-neutral-950 transition-shadow duration-150 will-change-transform hover:z-[100] hover:shadow-2xl focus-visible:ring-2 focus-visible:ring-amber-400 active:scale-[0.98]"
-      aria-label={label}
-    >
-      {inner}
-    </Link>
+    <div className="flex w-max max-w-[8rem] flex-col items-center gap-1">
+      <button
+        type="button"
+        aria-label={label}
+        aria-pressed={isFilterSelected}
+        onClick={onMapPress}
+        className={`block w-max max-w-[8rem] rounded-md outline-none ring-offset-2 ring-offset-neutral-950 transition-shadow duration-200 will-change-transform hover:z-[100] hover:shadow-2xl focus-visible:ring-2 focus-visible:ring-amber-400 active:scale-[0.98] ${ringClass}`}
+      >
+        {inner}
+      </button>
+      <Link
+        href={tableHref}
+        className="text-center text-[10px] font-semibold text-cyan-400/90 underline-offset-2 hover:text-cyan-300 hover:underline"
+        onClick={(e) => e.stopPropagation()}
+      >
+        Seat map
+      </Link>
+    </div>
   );
 }
 
-export function KitchenEventFloor({ eventId, tables, openOrderCountByTableId }: KitchenEventFloorProps) {
+export function KitchenEventFloor({
+  eventId,
+  tables,
+  openOrderCountByTableId,
+  highlightedTableId = null,
+  selectedTableFilterId = null,
+  onTableMapToggleFilter,
+}: KitchenEventFloorProps) {
   const canFloor = tables.some(
     (t) =>
       t.floor_x != null &&
@@ -109,43 +146,45 @@ export function KitchenEventFloor({ eventId, tables, openOrderCountByTableId }: 
         aria-label="Room floor and tables"
       >
         <p className="mb-2 text-center text-xs text-neutral-500">
-          Tap a table for the same seat map as the waiter view (view only). Use the list on the right
-          to mark dishes cooked or served.
+          Tap a table to filter the ticket list on the right. Use <span className="font-semibold text-neutral-400">Seat map</span> for the same layout as the waiter view (view only).
         </p>
         <div className="mx-auto max-h-[min(72dvh,36rem)] w-full max-w-lg overflow-x-auto overflow-y-auto overscroll-contain rounded-lg border border-dashed border-neutral-600 bg-neutral-900/80 [-webkit-overflow-scrolling:touch]">
           <div className="relative mx-auto aspect-[4/3] w-full max-w-lg">
-          <div className="absolute inset-5 sm:inset-6">
-            {tables.map((t, floorIndex) => {
-              const fx = t.floor_x;
-              const fy = t.floor_y;
-              if (fx == null || fy == null || !Number.isFinite(fx) || !Number.isFinite(fy)) {
-                return null;
-              }
-              const adjusted = displayPositions.get(t.id);
-              const px = adjusted?.x ?? fx;
-              const py = adjusted?.y ?? fy;
-              const rot = Number.isFinite(t.floor_rotation) ? t.floor_rotation : 0;
-              const openCount = openOrderCountByTableId[t.id] ?? 0;
-              return (
-                <div
-                  key={t.id}
-                  className="absolute"
-                  style={{
-                    left: `${px * 100}%`,
-                    top: `${py * 100}%`,
-                    transform: `translate(-50%, -50%) rotate(${rot}deg)`,
-                    zIndex: 10 + floorIndex,
-                  }}
-                >
-                  <TableSilhouette
-                    table={t}
-                    openCount={openCount}
-                    tableHref={`/kitchen/${eventId}/t/${t.id}`}
-                  />
-                </div>
-              );
-            })}
-          </div>
+            <div className="absolute inset-5 sm:inset-6">
+              {tables.map((t, floorIndex) => {
+                const fx = t.floor_x;
+                const fy = t.floor_y;
+                if (fx == null || fy == null || !Number.isFinite(fx) || !Number.isFinite(fy)) {
+                  return null;
+                }
+                const adjusted = displayPositions.get(t.id);
+                const px = adjusted?.x ?? fx;
+                const py = adjusted?.y ?? fy;
+                const rot = Number.isFinite(t.floor_rotation) ? t.floor_rotation : 0;
+                const openCount = openOrderCountByTableId[t.id] ?? 0;
+                return (
+                  <div
+                    key={t.id}
+                    className="absolute"
+                    style={{
+                      left: `${px * 100}%`,
+                      top: `${py * 100}%`,
+                      transform: `translate(-50%, -50%) rotate(${rot}deg)`,
+                      zIndex: 10 + floorIndex,
+                    }}
+                  >
+                    <TableSilhouette
+                      table={t}
+                      openCount={openCount}
+                      tableHref={`/kitchen/${eventId}/t/${t.id}`}
+                      isHighlighted={highlightedTableId === t.id}
+                      isFilterSelected={selectedTableFilterId === t.id}
+                      onMapPress={() => onTableMapToggleFilter?.(t.id)}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -162,6 +201,9 @@ export function KitchenEventFloor({ eventId, tables, openOrderCountByTableId }: 
               table={t}
               openCount={openCount}
               tableHref={`/kitchen/${eventId}/t/${t.id}`}
+              isHighlighted={highlightedTableId === t.id}
+              isFilterSelected={selectedTableFilterId === t.id}
+              onMapPress={() => onTableMapToggleFilter?.(t.id)}
             />
             <p className="mt-2 text-center text-[10px] text-neutral-500">
               {t.total_seats} seats · {layoutLabel(t.layout)}

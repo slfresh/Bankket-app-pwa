@@ -14,14 +14,15 @@ function navClass(
   isActive: boolean,
   variant: "default" | "kitchen",
 ): string {
+  const base = "inline-flex min-h-[44px] items-center rounded-md px-2 py-1 outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-950";
   if (variant === "kitchen") {
     return isActive
-      ? "text-neutral-100 font-semibold"
-      : "text-neutral-400 underline hover:text-neutral-200";
+      ? `${base} text-neutral-100 font-semibold`
+      : `${base} text-neutral-400 underline hover:text-neutral-200`;
   }
   return isActive
-    ? "text-neutral-900 font-semibold dark:text-neutral-100"
-    : "text-neutral-600 underline dark:text-neutral-400";
+    ? `${base} text-neutral-100 font-semibold`
+    : `${base} text-neutral-400 underline`;
 }
 
 /**

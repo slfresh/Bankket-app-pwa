@@ -12,6 +12,10 @@ import {
   placeSeatOrdersBatchSchema,
   updateSeatGuestNoteSchema,
 } from "@/lib/validation/actions";
+import {
+  normalizeOrderRow,
+  type OrderWithRelations,
+} from "@/lib/orders/order-with-relations";
 
 function firstZodIssue(error: z.ZodError): string {
   return error.issues[0]?.message ?? "Invalid input.";
@@ -72,17 +76,24 @@ export async function placeOrder(input: unknown) {
     return { error: "Menu item does not match the selected course." };
   }
 
-  const { error } = await supabase.from("orders").insert({
-    event_id: eventId,
-    table_id: tableId,
-    seat_number: seatNumber,
-    menu_item_id: menuItemId,
-    course,
-    special_wishes: specialWishes?.trim() || null,
-  });
+  const { data: inserted, error } = await supabase
+    .from("orders")
+    .insert({
+      event_id: eventId,
+      table_id: tableId,
+      seat_number: seatNumber,
+      menu_item_id: menuItemId,
+      course,
+      special_wishes: specialWishes?.trim() || null,
+    })
+    .select("*, menu_items(label), banquet_tables(name)")
+    .maybeSingle();
 
   if (error) {
     return { error: mapSupabaseError(error.message) };
+  }
+  if (!inserted) {
+    return { error: "Order could not be created." };
   }
 
   if (guestKitchenNote !== undefined) {
@@ -116,7 +127,8 @@ export async function placeOrder(input: unknown) {
   revalidatePath(`/kitchen/${eventId}`);
   revalidatePath(`/kitchen/today`);
   revalidateBanquetEventTag(eventId);
-  return { ok: true };
+  const orderRow = normalizeOrderRow(inserted as Record<string, unknown>);
+  return { ok: true as const, orders: [orderRow] as OrderWithRelations[] };
 }
 
 /**
@@ -194,10 +206,16 @@ export async function placeSeatOrdersBatch(input: unknown) {
     special_wishes: line.specialWishes?.trim() || null,
   }));
 
-  const { error: insertErr } = await supabase.from("orders").insert(insertRows);
+  const { data: insertedRows, error: insertErr } = await supabase
+    .from("orders")
+    .insert(insertRows)
+    .select("*, menu_items(label), banquet_tables(name)");
 
   if (insertErr) {
     return { error: mapSupabaseError(insertErr.message) };
+  }
+  if (!insertedRows?.length) {
+    return { error: "Orders could not be created." };
   }
 
   if (guestKitchenNote !== undefined) {
@@ -231,7 +249,8 @@ export async function placeSeatOrdersBatch(input: unknown) {
   revalidatePath(`/kitchen/${eventId}`);
   revalidatePath(`/kitchen/today`);
   revalidateBanquetEventTag(eventId);
-  return { ok: true };
+  const orders = insertedRows.map((r) => normalizeOrderRow(r as Record<string, unknown>));
+  return { ok: true as const, orders };
 }
 
 export async function updateSeatGuestNote(input: unknown) {
@@ -290,7 +309,7 @@ export async function updateSeatGuestNote(input: unknown) {
   revalidatePath(`/kitchen/${eventId}`);
   revalidatePath(`/kitchen/today`);
   revalidateBanquetEventTag(eventId);
-  return { ok: true };
+  return { ok: true as const };
 }
 
 /** Remove a pending order (wrong seat / wrong choice) before the kitchen has cooked it. */
@@ -329,5 +348,5 @@ export async function cancelPendingOrder(input: unknown) {
   revalidatePath(`/kitchen/${eventId}`);
   revalidatePath(`/kitchen/today`);
   revalidateBanquetEventTag(eventId);
-  return { ok: true };
+  return { ok: true as const, deletedOrderId: orderId };
 }

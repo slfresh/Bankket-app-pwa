@@ -17,12 +17,12 @@ export default async function KitchenLayout({
   }
 
   return (
-    <div className="flex min-h-dvh flex-1 flex-col bg-neutral-950 text-neutral-50">
-      <header className="flex items-center justify-between gap-4 border-b border-neutral-800 px-4 py-3">
+    <div className="flex min-h-dvh flex-1 flex-col bg-surface-kitchen text-zinc-50">
+      <header className="flex items-center justify-between gap-4 border-b border-border-kitchen px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
         <StaffAreaNav current="kitchen" role={profile.role} variant="kitchen" />
-        <SignOutButton className="text-sm text-neutral-400 underline" />
+        <SignOutButton className="min-h-[44px] text-sm text-zinc-400 underline" />
       </header>
-      <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+      <div id="main-content" className="flex min-h-0 flex-1 flex-col">{children}</div>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import type { Json } from "@/lib/database.types";
@@ -149,8 +150,17 @@ function TableRowEditor({
           Delete table
         </button>
       </div>
-      <p className="mt-2 text-xs text-neutral-500">
-        {table.total_seats} seats · {table.layout === "round" ? "Round" : table.layout === "block" ? "Block" : "L-shape"}
+      <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
+        <span>
+          {table.total_seats} seats ·{" "}
+          {table.layout === "round" ? "Round" : table.layout === "block" ? "Block" : "L-shape"}
+        </span>
+        <Link
+          href={`/manager/events/${eventId}/table/${table.id}/edit`}
+          className="min-h-[44px] inline-flex items-center font-medium text-accent underline"
+        >
+          Quick rename (modal)
+        </Link>
       </p>
       {table.layout === "l_shape" ? (
         <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-neutral-100 pt-3 dark:border-neutral-800">

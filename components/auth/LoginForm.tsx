@@ -59,10 +59,10 @@ export function LoginForm() {
   }
 
   return (
-    <main className="mx-auto flex min-h-full w-full max-w-md flex-1 flex-col justify-center gap-6 px-4 py-10">
+    <main className="mx-auto flex min-h-full w-full max-w-md flex-1 flex-col justify-center gap-6 px-4 py-10 text-neutral-100">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Banquet Ordering</h1>
-        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
+        <p className="mt-1 text-sm text-neutral-400">
           Staff sign-in (Supabase Auth — enable email + password in the dashboard).
         </p>
       </div>
@@ -89,7 +89,7 @@ export function LoginForm() {
             {error}
           </p>
         ) : null}
-        <label className="flex flex-col gap-1 text-sm font-medium">
+        <label className="flex flex-col gap-1 text-sm font-medium text-neutral-200">
           Email
           <input
             required
@@ -99,7 +99,7 @@ export function LoginForm() {
             className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-base dark:border-neutral-700 dark:bg-neutral-900"
           />
         </label>
-        <label className="flex flex-col gap-1 text-sm font-medium">
+        <label className="flex flex-col gap-1 text-sm font-medium text-neutral-200">
           Password
           <input
             required
@@ -112,7 +112,7 @@ export function LoginForm() {
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900"
+          className="min-h-[44px] w-full rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-accent-foreground disabled:opacity-60"
         >
           {pending ? "Signing in…" : "Sign in"}
         </button>
