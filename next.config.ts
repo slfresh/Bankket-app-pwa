@@ -9,6 +9,51 @@ const withPWA = withPWAInit({
   reloadOnOnline: true,
   workboxOptions: {
     disableDevLogs: true,
+    /** Replaces @ducanh2912/next-pwa's default runtime list (see build log). Kitchen-first + Supabase REST + static. */
+    runtimeCaching: [
+      {
+        urlPattern: ({ request }: { request: Request }) =>
+          request.mode === "navigate" && /\/kitchen(\/|$)/.test(new URL(request.url).pathname),
+        handler: "NetworkFirst",
+        options: {
+          cacheName: "kitchen-html",
+          networkTimeoutSeconds: 3,
+          expiration: { maxEntries: 16, maxAgeSeconds: 60 * 60 * 24 },
+        },
+      },
+      {
+        urlPattern: /^https:\/\/.*\.supabase\.co\/rest\/v1\//,
+        handler: "StaleWhileRevalidate",
+        options: {
+          cacheName: "supabase-rest",
+          expiration: { maxEntries: 64, maxAgeSeconds: 60 * 60 * 24 },
+        },
+      },
+      {
+        urlPattern: /\/_next\/static\/.*/i,
+        handler: "CacheFirst",
+        options: {
+          cacheName: "next-static",
+          expiration: { maxEntries: 120, maxAgeSeconds: 60 * 60 * 24 * 30 },
+        },
+      },
+      {
+        urlPattern: /\/icons\/.*/i,
+        handler: "CacheFirst",
+        options: {
+          cacheName: "pwa-icons",
+          expiration: { maxEntries: 32, maxAgeSeconds: 60 * 60 * 24 * 30 },
+        },
+      },
+      {
+        urlPattern: /\.(?:woff2|woff|ttf|otf)$/i,
+        handler: "CacheFirst",
+        options: {
+          cacheName: "web-fonts",
+          expiration: { maxEntries: 24, maxAgeSeconds: 60 * 60 * 24 * 30 },
+        },
+      },
+    ],
   },
 });
 

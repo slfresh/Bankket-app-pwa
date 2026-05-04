@@ -12,6 +12,7 @@ import {
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useKitchenNewOrderPing } from "@/hooks/useKitchenNewOrderPing";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useOrdersRealtime, type OrderWithRelations } from "@/hooks/useOrdersRealtime";
 import { useReadyFlash } from "@/hooks/useReadyFlash";
 import { useSeatGuestNotesForEvent } from "@/hooks/useSeatGuestNotesRealtime";
@@ -30,12 +31,17 @@ import {
 import { toast as sonnerToast } from "sonner";
 import { advanceOrderStatus } from "@/lib/actions/kitchen";
 import { RealtimeConnectionBanner } from "@/components/staff/RealtimeConnectionBanner";
+import { PageOfflineBanner } from "@/components/staff/PageOfflineBanner";
 import { createClient } from "@/lib/supabase/client";
 import {
   KitchenEventFloor,
   type KitchenFloorTableRow,
 } from "@/components/kitchen/KitchenEventFloor";
 import { KitchenTableTicket } from "@/components/kitchen/KitchenTableTicket";
+import {
+  KitchenShortcutsDialog,
+  KitchenShortcutsDialogBodyDefault,
+} from "@/components/kitchen/KitchenShortcutsDialog";
 
 type KitchenBoardProps = {
   eventId: string;
@@ -126,6 +132,10 @@ export function KitchenBoard({ eventId, eventName }: KitchenBoardProps) {
 
   const { readyFlashOrderIds, flashReadyIds } = useReadyFlash();
 
+  const online = useOnlineStatus();
+
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
   const toggleMuteShortcut = useCallback(() => {
     primeKitchenAudio();
     setSoundMuted((prev) => {
@@ -143,7 +153,7 @@ export function KitchenBoard({ eventId, eventName }: KitchenBoardProps) {
     () => displayOrders.filter((o) => o.status === "pending"),
     [displayOrders],
   );
-  const { toast, dismissToast } = useKitchenNewOrderPing(pendingOnly);
+  const { toast, dismissToast, liveRegionText } = useKitchenNewOrderPing(pendingOnly);
 
   useEffect(() => {
     let cancelled = false;
@@ -203,6 +213,9 @@ export function KitchenBoard({ eventId, eventName }: KitchenBoardProps) {
       ) {
         return;
       }
+      if (shortcutsOpen) {
+        return;
+      }
       if (event.key === "1") {
         event.preventDefault();
         setStatusFilter("all");
@@ -218,11 +231,14 @@ export function KitchenBoard({ eventId, eventName }: KitchenBoardProps) {
       } else if (event.key === "/") {
         event.preventDefault();
         ticketSearchRef.current?.focus();
+      } else if (event.key === "?") {
+        event.preventDefault();
+        setShortcutsOpen(true);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [toggleMuteShortcut]);
+  }, [toggleMuteShortcut, shortcutsOpen]);
 
   /** Arrow-key navigation inside the tablist (roving tabindex). */
   const onTabKeyDown = useCallback(
@@ -381,6 +397,9 @@ export function KitchenBoard({ eventId, eventName }: KitchenBoardProps) {
         primeKitchenAudio();
       }}
     >
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {liveRegionText}
+      </div>
       {toast ? (
         <div className="fixed left-1/2 top-20 z-[100] w-[min(100%,24rem)] -translate-x-1/2 px-4">
           <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-600/60 bg-amber-950 px-4 py-3 text-amber-50 shadow-lg">
@@ -403,6 +422,14 @@ export function KitchenBoard({ eventId, eventName }: KitchenBoardProps) {
               Live board · tap a table on the map to filter tickets · hover a ticket to highlight the table
             </p>
           </div>
+          <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="focus-visible-kitchen min-h-[44px] rounded-lg border border-neutral-600 px-3 py-2 text-xs font-medium text-neutral-300 hover:bg-neutral-800"
+            onClick={() => setShortcutsOpen(true)}
+          >
+            Shortcuts (?)
+          </button>
           <button
             type="button"
             className="focus-visible-kitchen min-h-[44px] rounded-lg border border-neutral-600 px-3 py-2 text-xs font-medium text-neutral-300 hover:bg-neutral-800"
@@ -411,6 +438,7 @@ export function KitchenBoard({ eventId, eventName }: KitchenBoardProps) {
             {soundMuted ? "Unmute new-order sound" : "Mute new-order sound"}
           </button>
         </div>
+        </div>
         <div className="mt-3">
           <RealtimeConnectionBanner
             variant="kitchen"
@@ -418,6 +446,9 @@ export function KitchenBoard({ eventId, eventName }: KitchenBoardProps) {
             realtimeMessage={realtimeMessage}
             onRefresh={() => void refetch({ silent: true })}
           />
+          <div className="mt-2">
+            <PageOfflineBanner online={online} />
+          </div>
         </div>
         <div
           role="tablist"
@@ -484,7 +515,7 @@ export function KitchenBoard({ eventId, eventName }: KitchenBoardProps) {
             );
           })}
           <p className="sr-only">
-            Tip: press 1, 2, or 3 for filters, M to mute, slash to search tables. Arrow keys move between filter tabs.
+            Tip: press 1, 2, or 3 for filters, M to mute, slash to search tables, question mark for shortcuts list. Arrow keys move between filter tabs.
           </p>
         </div>
         {loadError ? (
@@ -702,6 +733,9 @@ export function KitchenBoard({ eventId, eventName }: KitchenBoardProps) {
           </p>
         )}
       </div>
+      <KitchenShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)}>
+        <KitchenShortcutsDialogBodyDefault />
+      </KitchenShortcutsDialog>
     </div>
   );
 }

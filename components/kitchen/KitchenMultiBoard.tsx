@@ -10,6 +10,7 @@ import {
 } from "react";
 import { useKitchenMultiOrdersRealtime } from "@/hooks/useKitchenMultiOrdersRealtime";
 import { useKitchenNewOrderPing } from "@/hooks/useKitchenNewOrderPing";
+import { useOnlineStatus } from "@/hooks/useOnlineStatus";
 import { useSeatGuestNotesForEvents } from "@/hooks/useSeatGuestNotesRealtime";
 import { menuCourseSortIndex } from "@/lib/domain/menu-course";
 import {
@@ -20,6 +21,7 @@ import {
 import { toast as sonnerToast } from "sonner";
 import { advanceOrderStatus } from "@/lib/actions/kitchen";
 import { RealtimeConnectionBanner } from "@/components/staff/RealtimeConnectionBanner";
+import { PageOfflineBanner } from "@/components/staff/PageOfflineBanner";
 import type { OrderWithRelations } from "@/hooks/useOrdersRealtime";
 import { useReadyFlash } from "@/hooks/useReadyFlash";
 import { KitchenTableTicket } from "@/components/kitchen/KitchenTableTicket";
@@ -78,6 +80,7 @@ export function KitchenMultiBoard({ events }: { events: EventMeta[] }) {
   const [isPending, startTransition] = useTransition();
   const [soundMuted, setSoundMuted] = useState(false);
   const { readyFlashOrderIds, flashReadyIds } = useReadyFlash();
+  const online = useOnlineStatus();
 
   useEffect(() => {
     setSoundMuted(isKitchenSoundMuted());
@@ -87,7 +90,7 @@ export function KitchenMultiBoard({ events }: { events: EventMeta[] }) {
     () => displayOrders.filter((o) => o.status === "pending"),
     [displayOrders],
   );
-  const { toast, dismissToast } = useKitchenNewOrderPing(pendingOnly);
+  const { toast, dismissToast, liveRegionText } = useKitchenNewOrderPing(pendingOnly);
 
   const filteredOrders = useMemo(() => {
     if (statusFilter === "all") return displayOrders;
@@ -189,6 +192,9 @@ export function KitchenMultiBoard({ events }: { events: EventMeta[] }) {
         primeKitchenAudio();
       }}
     >
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {liveRegionText}
+      </div>
       {toast ? (
         <div className="fixed left-1/2 top-20 z-[100] w-[min(100%,24rem)] -translate-x-1/2 px-4">
           <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-600/60 bg-amber-950 px-4 py-3 text-amber-50 shadow-lg">
@@ -220,6 +226,9 @@ export function KitchenMultiBoard({ events }: { events: EventMeta[] }) {
         realtimeMessage={realtimeMessage}
         onRefresh={() => void refetch({ silent: true })}
       />
+      <div className="mt-2">
+        <PageOfflineBanner online={online} />
+      </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
         {(["all", "pending", "cooked"] as const).map((key) => (

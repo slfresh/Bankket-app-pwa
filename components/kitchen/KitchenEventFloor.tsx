@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { Json, TableLayout } from "@/lib/database.types";
 import { FloorPlanTableShape } from "@/components/floor-plan/FloorPlanTableShape";
 import {
@@ -45,6 +46,8 @@ function TableSilhouette({
   isHighlighted,
   isFilterSelected,
   onMapPress,
+  buttonRef,
+  onTableButtonKeyDown,
 }: {
   table: KitchenFloorTableRow;
   openCount: number;
@@ -52,6 +55,8 @@ function TableSilhouette({
   isHighlighted: boolean;
   isFilterSelected: boolean;
   onMapPress: () => void;
+  buttonRef?: (el: HTMLButtonElement | null) => void;
+  onTableButtonKeyDown?: (e: ReactKeyboardEvent<HTMLButtonElement>) => void;
 }) {
   const label =
     openCount > 0
@@ -84,6 +89,8 @@ function TableSilhouette({
     <div className="flex w-max max-w-[8rem] flex-col items-center gap-1">
       <button
         type="button"
+        ref={buttonRef}
+        onKeyDown={onTableButtonKeyDown}
         aria-label={label}
         aria-pressed={isFilterSelected}
         onClick={onMapPress}
@@ -139,16 +146,74 @@ export function KitchenEventFloor({
     return separateFloorBoxes(boxes, { margin: 0.06, iterations: 55, gap: 0.012 });
   }, [tables]);
 
+  const orderedIds = useMemo(
+    () => [...tables].sort((a, b) => a.name.localeCompare(b.name)).map((t) => t.id),
+    [tables],
+  );
+
+  const tableButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+
+  const focusTableByIndex = useCallback(
+    (index: number) => {
+      const id = orderedIds[index];
+      if (!id) return;
+      tableButtonRefs.current.get(id)?.focus();
+    },
+    [orderedIds],
+  );
+
+  const handleTableButtonKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLButtonElement>, tableId: string) => {
+      const i = orderedIds.indexOf(tableId);
+      if (i < 0) return;
+
+      const moveTo = (nextIndex: number) => {
+        e.preventDefault();
+        focusTableByIndex(Math.max(0, Math.min(orderedIds.length - 1, nextIndex)));
+      };
+
+      switch (e.key) {
+        case "ArrowRight":
+        case "ArrowDown":
+          return moveTo(i + 1);
+        case "ArrowLeft":
+        case "ArrowUp":
+          return moveTo(i - 1);
+        case "Home":
+          e.preventDefault();
+          return focusTableByIndex(0);
+        case "End":
+          e.preventDefault();
+          return focusTableByIndex(orderedIds.length - 1);
+        default:
+      }
+    },
+    [orderedIds, focusTableByIndex],
+  );
+
+  const setTableButtonEl = useCallback((tableId: string) => (el: HTMLButtonElement | null) => {
+    if (el) {
+      tableButtonRefs.current.set(tableId, el);
+    } else {
+      tableButtonRefs.current.delete(tableId);
+    }
+  }, []);
+
   if (canFloor) {
     return (
       <div
+        role="group"
+        aria-label="Floor plan: pick a table to filter tickets. Use arrow keys between tables."
+        aria-describedby="kitchen-floor-hint"
         className="relative mx-auto w-full overflow-auto rounded-xl border border-dashed border-neutral-700 bg-neutral-950/40 p-2 sm:p-3"
-        aria-label="Room floor and tables"
       >
-        <p className="mb-2 text-center text-xs text-neutral-500">
+        <p id="kitchen-floor-hint" className="mb-2 text-center text-xs text-neutral-500">
           Tap a table to filter the ticket list on the right. Use <span className="font-semibold text-neutral-400">Seat map</span> for the same layout as the waiter view (view only).
         </p>
-        <div className="mx-auto max-h-[min(72dvh,36rem)] w-full max-w-lg overflow-x-auto overflow-y-auto overscroll-contain rounded-lg border border-dashed border-neutral-600 bg-neutral-900/80 [-webkit-overflow-scrolling:touch]">
+        <div
+          role="presentation"
+          className="mx-auto max-h-[min(72dvh,36rem)] w-full max-w-lg overflow-x-auto overflow-y-auto overscroll-contain rounded-lg border border-dashed border-neutral-600 bg-neutral-900/80 [-webkit-overflow-scrolling:touch]"
+        >
           <div className="relative mx-auto aspect-[4/3] w-full max-w-lg">
             <div className="absolute inset-5 sm:inset-6">
               {tables.map((t, floorIndex) => {
@@ -180,6 +245,8 @@ export function KitchenEventFloor({
                       isHighlighted={highlightedTableId === t.id}
                       isFilterSelected={selectedTableFilterId === t.id}
                       onMapPress={() => onTableMapToggleFilter?.(t.id)}
+                      buttonRef={setTableButtonEl(t.id)}
+                      onTableButtonKeyDown={(e) => handleTableButtonKeyDown(e, t.id)}
                     />
                   </div>
                 );
@@ -192,7 +259,11 @@ export function KitchenEventFloor({
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div
+      role="group"
+      aria-label="Tables: activate to filter ticket list."
+      className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+    >
       {tables.map((t) => {
         const openCount = openOrderCountByTableId[t.id] ?? 0;
         return (
@@ -204,6 +275,8 @@ export function KitchenEventFloor({
               isHighlighted={highlightedTableId === t.id}
               isFilterSelected={selectedTableFilterId === t.id}
               onMapPress={() => onTableMapToggleFilter?.(t.id)}
+              buttonRef={setTableButtonEl(t.id)}
+              onTableButtonKeyDown={(e) => handleTableButtonKeyDown(e, t.id)}
             />
             <p className="mt-2 text-center text-[10px] text-neutral-500">
               {t.total_seats} seats · {layoutLabel(t.layout)}
